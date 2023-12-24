@@ -33,6 +33,8 @@ class Node_Table:
     def contains(self, node):
         return node in self.nodes
     
-    ## AT: lyh
-    async def send_table(ip, port):
-        pass
+    # 似乎暂时没必要实现了
+    # 最后要return node_table，给上层进行encode
+    # async def send_table(ip, port):
+    #     pass
+        # return node_table

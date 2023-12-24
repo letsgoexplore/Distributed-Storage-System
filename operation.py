@@ -37,6 +37,10 @@ async def read_data():
 async def handle_read_data():
     pass
 
+# 最后能写成抽象函数，对于任意的类型都能encode
+async def encode_message():
+    pass
+
 # 返回事务类型flag，和事务信息data
 def decode_message():
     pass
