@@ -3,7 +3,7 @@ import asyncio
 import json
 
 from network_layer import Node, Node_Table
-from data_layer import Data, Data_Table
+from data_layer import Data, DataTable
 
 # 返回node_table和data_table
 def setup():
@@ -65,3 +65,5 @@ async def start_service():
             asyncio.run(handle_store_data())
         elif flag == 'read':
             asyncio.run(handle_read_data())
+        elif flag == 'ack':
+            pass
