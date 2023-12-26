@@ -4,6 +4,8 @@ import os
 import asyncio
 import json
 import aiofiles
+from hash_ring import HashRing
+from itertools import islice
 
 
 async def process_received_data(node, data_receive_server: DataReceiveServer, data_table: DataTableService):
@@ -11,7 +13,7 @@ async def process_received_data(node, data_receive_server: DataReceiveServer, da
     异步处理接收到的数据的任务函数，在主程序中调用
     :param node: 当前运行的节点的id值或node对象（暂未定）
     :param data_receive_server: 运行中的DataReceiveServer对象
-    :param data_table： DataTableService
+    :param data_table: DataTableService
 
     """
     print('process_received_data running!')
@@ -32,7 +34,6 @@ async def process_received_data(node, data_receive_server: DataReceiveServer, da
 
 
 class Data:
-    # path: '../storage/xxxxx'
     def __init__(self, id, save_hash, title, path, check_hash=0):
         self.id = id
         self.save_hash = save_hash
@@ -105,8 +106,14 @@ class Data:
 
     # TODO
     # function: using Consistent Hashing Algorithm to decide whether to save
-    def need_to_save(self, node_id):
-        return True
+    def need_to_save(self, ring: HashRing, node_id: str):
+        node_generator = ring.iterate_nodes(self.path)
+        # 映射到哈希环使用的两个节点
+        for node in islice(node_generator, 2):
+            if node_id == node:
+                return True
+            # print(f"Key '{self.path}' maps to node: {node}")
+        return False
 
     # currently assume no transmission error
     def verify_file_with_check_hash(self):
