@@ -1,23 +1,48 @@
-# import package
 from __future__ import annotations
+# import package
+import os
 import asyncio
 import json
+import aiofiles
+
+
+async def process_received_data(node, data_receive_server: DataReceiveServer, data_table: DataTableService):
+    """
+    异步处理接收到的数据的任务函数，在主程序中调用
+    :param node: 当前运行的节点的id值或node对象（暂未定）
+    :param data_receive_server: 运行中的DataReceiveServer对象
+    :param data_table： DataTableService
+
+    """
+    print('process_received_data running!')
+    while True:
+        received_data = await data_receive_server.received_data_queue.get()
+        # 维护数据表
+        data_table.add_data(received_data)
+        if received_data.need_to_save(node):
+            pass
+        else:
+            # 不需要保存的数据进行删除
+            try:
+                os.remove(received_data.path)
+                # 调试点
+                # print(f"File '{received_data.path}' deleted successfully.")
+            except OSError as e:
+                print(f"Error deleting file '{received_data.path}': {e}")
 
 
 class Data:
     # path: '../storage/xxxxx'
     def __init__(self, id, save_hash, title, path, check_hash=0):
-        # here, 'file' refer to the local address of the file
-        #       'locations' refers to which place the file is saved
-        # for key, value in locals().items():
-        #     if key != "self":
-        #         setattr(self, key, value)
-        # 废除了上面的初始化方式，使用了如下显式的初始化
         self.id = id
         self.save_hash = save_hash
         self.title = title
         self.path = path
         self.check_hash = check_hash
+        try:
+            self.file_size = os.path.getsize(self.path)
+        except FileNotFoundError:
+            print(f"File '{self.path}' not found.")
 
     # !!!!!
     def __eq__(self, other:Data):
@@ -26,7 +51,14 @@ class Data:
         return False
 
     # TODO
-    async def send_data(self, ip, port,timeout=100):
+    async def send_data(self, ip, port=8888, timeout=100):
+        """
+            用于将本Data对象发送至指定节点
+            :param ip: 目的ip
+            :param port: 目的端口，可使用缺省值8888
+            :param timeout： 超时上限，缺省值100s
+
+            """
         while True:
             try:
                 reader, writer = await asyncio.open_connection(ip, port)
@@ -37,7 +69,8 @@ class Data:
                     "save_hash": self.save_hash,
                     "title": self.title,
                     "path": self.path,
-                    "check_hash": self.check_hash}
+                    "check_hash": self.check_hash,
+                    "file_size": self.file_size}
                 json_data = json.dumps(data).encode('utf-8')
                 ## 2 read file
                 # currently, it's reading from local address
@@ -73,20 +106,54 @@ class Data:
     # TODO
     # function: using Consistent Hashing Algorithm to decide whether to save
     def need_to_save(self, node_id):
-        pass
+        return True
 
     # currently assume no transmission error
     def verify_file_with_check_hash(self):
         return True
 
 
-## AT: pr
-class DataTable:
-    def __init__(self, initial_datas=None):
+class DataReceiveServer:
+    def __init__(self, port=8888):
+        self.port = port
+        self.received_data_queue = asyncio.Queue()
+
+    async def handle_receive(self, reader, writer):
+        # Read JSON data
+        data = await reader.readuntil(b'\n\n')
+        json_data = json.loads(data.decode('utf-8'))
+        pdf_data = await reader.readexactly(json_data['file_size'])
+        received_data = Data(
+            id=json_data['id'],
+            save_hash=json_data['save_hash'],
+            title=json_data['title'],
+            path=json_data['path'],
+            check_hash=json_data['check_hash'])
+        os.makedirs(os.path.dirname(json_data['path']), exist_ok=True)
+        async with aiofiles.open(json_data['path'], 'wb') as file:
+            await file.write(pdf_data)
+        await self.received_data_queue.put(received_data)
+
+        # 发送ACK
+        writer.write(b'ACK\n')
+        await writer.drain()
+        writer.close()
+
+    async def run(self):
+        server = await asyncio.start_server(self.handle_receive, '127.0.0.1', self.port)
+        addr = server.sockets[0].getsockname()
+        print(f'Receiving on {addr}')
+        async with server:
+            await server.serve_forever()
+
+
+class DataTableService:
+    def __init__(self, initial_datas=None, port=8889):
         if initial_datas is None:
             self.datas = []
         else:
             self.datas = initial_datas
+        self.port = port
 
     def add_data(self, data):
         self.datas.append(data)
@@ -119,7 +186,13 @@ class DataTable:
             # 接收数据
             data = await reader.readuntil(b'\n\n')
             json_data_table = json.loads(data.decode('utf-8'))
-            self.datas = json_data_table
+            data_dict_list = json_data_table
+            # 将数据字典转换回Data对象
+            self.datas = [
+                Data(id=data_dict['id'], save_hash=data_dict['save_hash'], title=data_dict['title'],
+                     path=data_dict['path'], check_hash=data_dict['check_hash'])
+                for data_dict in data_dict_list
+            ]
 
         except asyncio.CancelledError:
             pass
@@ -128,3 +201,39 @@ class DataTable:
 
         writer.close()
         await writer.wait_closed()
+
+    async def handle_client(self, reader, writer):
+        try:
+            request = await reader.readuntil(b'\n')
+            # 收到获取datatable请求
+            if request == b'REQUEST_DATA_TABLE\n':
+                print("Client requested Data_Table")
+                data_dict_list = [
+                    {'id': data.id, 'save_hash': data.save_hash, 'title': data.title, 'path': data.path,
+                     'check_hash': data.check_hash, 'file_size': data.file_size}
+                    for data in self.datas
+                ]
+                json_data = json.dumps(data_dict_list)
+                writer.write(json_data.encode('utf-8'))
+                writer.write(b'\n\n')  # Using two newline characters as a separator
+            else:
+                print("Unknown request from the client")
+            await writer.drain()
+
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            print(f"Error during handle_client: {e}")
+
+        writer.close()
+
+    async def run(self):
+        try:
+            server = await asyncio.start_server(self.handle_client, '127.0.0.1', self.port)
+            addr = server.sockets[0].getsockname()
+            print(f'Sending DataTable on {addr}')
+            async with server:
+                await server.serve_forever()
+
+        except Exception as e:
+            print(f"Error during run DataTableSendServer: {e}")
