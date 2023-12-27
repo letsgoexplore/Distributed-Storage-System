@@ -80,3 +80,5 @@ ipython_config.py
 .vscode/
 files/
 temp/
+storage/
+download/
