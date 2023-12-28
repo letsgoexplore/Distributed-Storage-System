@@ -1,10 +1,11 @@
 from __future__ import annotations
-# import package
 import os
 import asyncio
 import json
 import aiofiles
 from hash_ring import HashRing
+from network_layer import Node, Node_Table
+import socket
 from itertools import islice
 
 
@@ -165,46 +166,6 @@ class DataServer:
         self.ip = ip
         self.port = port
 
-    # 这个应该单独放到operation里
-    async def download_from_remote(self, data: Data, ip, port, timeout=1000):
-        request = b'DOWNLOAD\n\n'
-        try:
-            reader, writer = await asyncio.open_connection(ip, port)
-
-            data0 = {
-                "id": data.id,
-                "save_hash": data.save_hash,
-                "title": data.title,
-                "path": data.path,
-                "check_hash": data.check_hash,
-                "file_size": data.file_size}
-            json_data = json.dumps(data0).encode('utf-8')
-
-            ## 3 send data，收集ACK，没有收到的加入到queue中隔一段时间继续发送
-            writer.write(request)
-            writer.write(json_data)
-            writer.write(b'\n\n')  # 使用两个换行符作为分隔符
-            await writer.drain()
-            pdf_data = await reader.readexactly(data.file_size)
-            download_path = './download/' + data.title
-            os.makedirs(os.path.dirname(download_path), exist_ok=True)
-            async with aiofiles.open(download_path, 'wb') as file:
-                await file.write(pdf_data)
-
-
-
-        except asyncio.TimeoutError:
-            print("Timeout occurred when download_from_remote.")
-        except OSError as e:
-            print(f"Connection failed when download_from_remote. Error: {e}.")
-            await asyncio.sleep(10)
-            print("Retrying...")
-
-        finally:
-            if 'writer' in locals():
-                writer.close()
-                await writer.wait_closed()
-
     async def handle_request_data_table(self, reader, writer):
         data_dict_list = [
             {'id': data.id, 'save_hash': data.save_hash, 'title': data.title, 'path': data.path,
@@ -250,6 +211,41 @@ class DataServer:
                 pdf_data = file.read()
             writer.write(pdf_data)
 
+    async def handle_join_network(self, data):
+        data = data.split("/")
+        ip = data[0]
+        parent_ip = data[1]
+
+        node = Node(ip=ip, parent_ip=parent_ip)
+        node_table = Node_Table(new_start=False)
+        node_table.add_node(node)
+
+        # 获取本机ip地址
+        # ip = "192.168.52.1"
+        self_ip = socket.gethostbyname(socket.gethostname())
+
+        # 并且如果自己是父节点，向请求添加的节点发送节点链表
+        if self_ip == parent_ip:
+            json_dir = {}
+            json_dir["IPs_nodes"] = node_table.nodes
+            json_dir["IPs_next_nodes"] = node_table.next_nodes
+            json_dir["IPs_pre_nodes"] = node_table.pre_nodes
+            data = json.dumps(json_dir)
+            flag = "update"
+            # send message，将该json_str(字符串)发送给请求加入的节点，让他更新node table
+
+    async def handle_update_network(self, data):
+        json_dir = json.loads(data)
+        node_table = Node_Table(initial_nodes=None)
+        node_table.update(nodes=json_dir["IPs_nodes"], next_nodes=json_dir["IPs_next_nodes"],
+                          pre_nodes=json_dir["IPs_pre_nodes"])
+
+    async def handle_quit_network(data):
+
+        ip = data
+        node_table = Node_Table(new_start=False)
+        node_table.remove_node(ip)
+
     # 对应operation中的decode_message()
     async def handle_client(self, reader, writer):
         try:
@@ -267,6 +263,9 @@ class DataServer:
                 pass
 
             elif request == b'QUIT\n\n':
+                pass
+
+            elif request == b'UPDATE_NET\n\n':
                 pass
 
             elif request == b'DOWNLOAD\n\n':
