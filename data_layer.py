@@ -7,31 +7,6 @@ import aiofiles
 from hash_ring import HashRing
 from itertools import islice
 
-# 已废弃 ↓
-async def process_received_data(node, data_receive_server: DataReceiveServer, data_table: DataTableService):
-    """
-    异步处理接收到的数据的任务函数，在主程序中调用
-    :param node: 当前运行的节点的id值或node对象（暂未定）
-    :param data_receive_server: 运行中的DataReceiveServer对象
-    :param data_table: DataTableService
-
-    """
-    print('process_received_data running!')
-    while True:
-        received_data = await data_receive_server.received_data_queue.get()
-        # 维护数据表
-        data_table.add_data(received_data)
-        if received_data.need_to_save(node):
-            pass
-        else:
-            # 不需要保存的数据进行删除
-            try:
-                os.remove(received_data.path)
-                # 调试点
-                # print(f"File '{received_data.path}' deleted successfully.")
-            except OSError as e:
-                print(f"Error deleting file '{received_data.path}': {e}")
-
 
 class Data:
     def __init__(self, id, save_hash, title, path, check_hash=0):
@@ -40,7 +15,7 @@ class Data:
         self.title = title
         self.path = path
         self.check_hash = check_hash
-        self.save_path = "./storage/"
+        self.save_path = "./storage/" + self.title
         try:
             self.file_size = os.path.getsize(self.path)
         except FileNotFoundError:
@@ -124,40 +99,6 @@ class Data:
         return True
 
 
-# 已废弃 ↓
-class DataReceiveServer:
-    def __init__(self, port=8888):
-        self.port = port
-        self.received_data_queue = asyncio.Queue()
-
-    async def handle_receive(self, reader, writer):
-        # Read JSON data
-        data = await reader.readuntil(b'\n\n')
-        json_data = json.loads(data.decode('utf-8'))
-        pdf_data = await reader.readexactly(json_data['file_size'])
-        received_data = Data(
-            id=json_data['id'],
-            save_hash=json_data['save_hash'],
-            title=json_data['title'],
-            path=json_data['path'],
-            check_hash=json_data['check_hash'])
-        os.makedirs(os.path.dirname(json_data['path']), exist_ok=True)
-        async with aiofiles.open(json_data['path'], 'wb') as file:
-            await file.write(pdf_data)
-        await self.received_data_queue.put(received_data)
-
-        # 发送ACK
-        writer.write(b'ACK\n')
-        await writer.drain()
-        writer.close()
-
-    async def run(self):
-        server = await asyncio.start_server(self.handle_receive, '127.0.0.1', self.port)
-        addr = server.sockets[0].getsockname()
-        print(f'Receiving on {addr}')
-        async with server:
-            await server.serve_forever()
-
 
 class DataTable:
     def __init__(self, initial_datas=None):
@@ -166,6 +107,9 @@ class DataTable:
         else:
             self.datas = initial_datas
 
+    def __iter__(self):
+        return iter(self.datas)
+
     def add_data(self, data):
         self.datas.append(data)
 
@@ -190,7 +134,7 @@ class DataTable:
         reader, writer = await asyncio.open_connection(ip, port)
         try:
             # 发送请求
-            writer.write(b'REQUEST_DATA_TABLE\n')
+            writer.write(b'REQUEST_DATA_TABLE\n\n')
             await writer.drain()
 
             # 接收数据
@@ -211,109 +155,17 @@ class DataTable:
 
         writer.close()
         await writer.wait_closed()
-
-
-# 已废弃 ↓
-class DataTableService:
-    def __init__(self, initial_datas=None, port=8889):
-        if initial_datas is None:
-            self.datas = []
-        else:
-            self.datas = initial_datas
-        self.port = port
-
-    def add_data(self, data):
-        self.datas.append(data)
-
-    def remove_node(self, data):
-        self.datas.remove(data)
-
-    def contains(self, data):
-        return data in self.datas
-
-    def save_table(self, filename='data_table.json'):
-        with open(filename, 'w') as file:
-            json.dump(self.datas, file)
-
-    def load_table(self, filename='data_table.json'):
-        try:
-            with open(filename, 'r') as file:
-                self.datas = json.load(file)
-        except FileNotFoundError:
-            print(f"File '{filename}' not found. Initializing with an empty table.")
-
-    # 从其他节点请求data_table数据
-    async def request_data_table(self, ip, port):
-        reader, writer = await asyncio.open_connection(ip, port)
-        try:
-            # 发送请求
-            writer.write(b'REQUEST_DATA_TABLE\n')
-            await writer.drain()
-
-            # 接收数据
-            data = await reader.readuntil(b'\n\n')
-            json_data_table = json.loads(data.decode('utf-8'))
-            data_dict_list = json_data_table
-            # 将数据字典转换回Data对象
-            self.datas = [
-                Data(id=data_dict['id'], save_hash=data_dict['save_hash'], title=data_dict['title'],
-                     path=data_dict['path'], check_hash=data_dict['check_hash'])
-                for data_dict in data_dict_list
-            ]
-
-        except asyncio.CancelledError:
-            pass
-        except Exception as e:
-            print(f"Error during request_data_table: {e}")
-
-        writer.close()
-        await writer.wait_closed()
-
-    async def handle_client(self, reader, writer):
-        try:
-            request = await reader.readuntil(b'\n')
-            # 收到获取datatable请求
-            if request == b'REQUEST_DATA_TABLE\n':
-                print("Client requested Data_Table")
-                data_dict_list = [
-                    {'id': data.id, 'save_hash': data.save_hash, 'title': data.title, 'path': data.path,
-                     'check_hash': data.check_hash, 'file_size': data.file_size}
-                    for data in self.datas
-                ]
-                json_data = json.dumps(data_dict_list)
-                writer.write(json_data.encode('utf-8'))
-                writer.write(b'\n\n')  # Using two newline characters as a separator
-            else:
-                print("Unknown request from the client")
-            await writer.drain()
-
-        except asyncio.CancelledError:
-            pass
-        except Exception as e:
-            print(f"Error during handle_client: {e}")
-
-        writer.close()
-
-    async def run(self):
-        try:
-            server = await asyncio.start_server(self.handle_client, '127.0.0.1', self.port)
-            addr = server.sockets[0].getsockname()
-            print(f'Sending DataTable on {addr}')
-            async with server:
-                await server.serve_forever()
-
-        except Exception as e:
-            print(f"Error during run DataTableSendServer: {e}")
 
 
 class DataServer:
-    def __init__(self, data_table: DataTable, node_id: str, ring: HashRing(), ip: str='127.0.0.1', port: int=8888):
+    def __init__(self, data_table: DataTable, node_id: str, ring: HashRing, ip: str='127.0.0.1', port: int=8888):
         self.data_table = data_table
         self.node_id = node_id
         self.ring = ring
         self.ip = ip
         self.port = port
 
+    # 这个应该单独放到operation里
     async def download_from_remote(self, data: Data, ip, port, timeout=1000):
         request = b'DOWNLOAD\n\n'
         try:
@@ -330,11 +182,15 @@ class DataServer:
 
             ## 3 send data，收集ACK，没有收到的加入到queue中隔一段时间继续发送
             writer.write(request)
-            await writer.drain()
             writer.write(json_data)
             writer.write(b'\n\n')  # 使用两个换行符作为分隔符
             await writer.drain()
             pdf_data = await reader.readexactly(data.file_size)
+            download_path = './download/' + data.title
+            os.makedirs(os.path.dirname(download_path), exist_ok=True)
+            async with aiofiles.open(download_path, 'wb') as file:
+                await file.write(pdf_data)
+
 
 
         except asyncio.TimeoutError:
@@ -349,6 +205,51 @@ class DataServer:
                 writer.close()
                 await writer.wait_closed()
 
+    async def handle_request_data_table(self, reader, writer):
+        data_dict_list = [
+            {'id': data.id, 'save_hash': data.save_hash, 'title': data.title, 'path': data.path,
+             'check_hash': data.check_hash, 'file_size': data.file_size}
+            for data in self.data_table.datas
+        ]
+        json_data = json.dumps(data_dict_list)
+        writer.write(json_data.encode('utf-8'))
+        writer.write(b'\n\n')  # Using two newline characters as a separator
+
+    async def handle_send_data(self, reader, writer):
+        data = await reader.readuntil(b'\n\n')
+        json_data = json.loads(data.decode('utf-8'))
+        pdf_data = await reader.readexactly(json_data['file_size'])
+        received_data = Data(
+            id=json_data['id'],
+            save_hash=json_data['save_hash'],
+            title=json_data['title'],
+            path=json_data['path'],
+            check_hash=json_data['check_hash'])
+        if received_data.need_to_save(self.ring, self.node_id):
+            os.makedirs(os.path.dirname(received_data.save_path), exist_ok=True)
+            async with aiofiles.open(received_data.save_path, 'wb') as file:
+                await file.write(pdf_data)
+        if received_data not in self.data_table:
+            self.data_table.add_data(received_data)
+
+        writer.write(b'ACK\n')
+
+    async def handle_download(self, reader, writer):
+        data = await reader.readuntil(b'\n\n')
+        json_data = json.loads(data.decode('utf-8'))
+        received_data = Data(
+            id=json_data['id'],
+            save_hash=json_data['save_hash'],
+            title=json_data['title'],
+            path=json_data['path'],
+            check_hash=json_data['check_hash'])
+
+        # 认为向你发起download的请求，则已知你拥有这个文件，还是判断一下，但应该没问题（如果达成前面的共识的话）
+        if received_data in self.data_table:
+            with open(received_data.save_path, 'rb') as file:
+                pdf_data = file.read()
+            writer.write(pdf_data)
+
     # 对应operation中的decode_message()
     async def handle_client(self, reader, writer):
         try:
@@ -356,35 +257,11 @@ class DataServer:
             # 收到获取datatable请求
             if request == b'REQUEST_DATA_TABLE\n\n':
                 print("Client requested Data_Table")
-                data_dict_list = [
-                    {'id': data.id, 'save_hash': data.save_hash, 'title': data.title, 'path': data.path,
-                     'check_hash': data.check_hash, 'file_size': data.file_size}
-                    for data in self.data_table.datas
-                ]
-                json_data = json.dumps(data_dict_list)
-                writer.write(json_data.encode('utf-8'))
-                writer.write(b'\n\n')  # Using two newline characters as a separator
+                await self.handle_request_data_table(reader, writer)
 
             # 收到数据
             elif request == b'SEND_DATA\n\n':
-                data = await reader.readuntil(b'\n\n')
-                json_data = json.loads(data.decode('utf-8'))
-                pdf_data = await reader.readexactly(json_data['file_size'])
-                received_data = Data(
-                    id=json_data['id'],
-                    save_hash=json_data['save_hash'],
-                    title=json_data['title'],
-                    path=json_data['path'],
-                    check_hash=json_data['check_hash'])
-                if received_data.need_to_save(self.ring, self.node_id):
-                    save_path = received_data.save_path + received_data.title
-                    os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                    async with aiofiles.open(save_path, 'wb') as file:
-                        await file.write(pdf_data)
-                self.data_table.add_data(received_data)
-                # await self.received_data_queue.put(received_data)
-
-                writer.write(b'ACK\n')
+                await self.handle_send_data(reader, writer)
 
             elif request == b'JOIN\n\n':
                 pass
@@ -393,19 +270,7 @@ class DataServer:
                 pass
 
             elif request == b'DOWNLOAD\n\n':
-                data = await reader.readuntil(b'\n\n')
-                json_data = json.loads(data.decode('utf-8'))
-                received_data = Data(
-                    id=json_data['id'],
-                    save_hash=json_data['save_hash'],
-                    title=json_data['title'],
-                    path=json_data['path'],
-                    check_hash=json_data['check_hash'])
-
-                # 认为向你发起download的请求，则已知你拥有这个文件
-                with open(received_data.save_path, 'rb') as file:
-                    pdf_data = file.read()
-                writer.write(pdf_data)
+                await self.handle_download(reader, writer)
             else:
                 print("Unknown request from the client")
             await writer.drain()
