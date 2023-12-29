@@ -1,3 +1,9 @@
+# start_network
+```python
+def start_network():
+    ip_table = [self]
+    data
+```
 
 # Join
 ```python
@@ -21,29 +27,24 @@ def join()
     for data_id, node in [data_id, node]:
         request_data(node.ip, node.port, IP, PORT, data_id)
                                                                     handle_request_data(发送数据)        
-                                         
+                                        
 ```
 
 # quit
 ```python
-ROOT_NODE, ROOT_IP, ROOT_PORT
 ip_table
 data_table
 def quit()
     for node in node_table:
         quit_request(node.ip, node.port, IP, PORT)
-                                                                    handle_quit_request(返回ACK; 确认哪些是需要自己存储的数据, 更改node_table, data_table)
-                                                                        {NodeTable:quit_node(data_table, id, ip, port)
-                                                                         DataTable:quit_node(id)}
+                                                                    handle_quit_request(在获得所有需要的数据后，返回ACK; 确认哪些是需要自己存储的数据, 更改node_table, data_table)
+                                                                        NodeTable:quit_node(data_table, id, ip, port)
+                                                                        DataTable:quit_node(id)
                                                                         [data_id, node] <- Datatable:quit_data_transmission(id, data_table)
-                                                                        }
-
-    
-
-    for data_id, node in [data_id, node]:
-        request_data(node.ip, node.port, IP, PORT, data_id)
-                                                                    handle_request_data(发送数据)        
-                                                
+                                                                        for data_id, node in [data_id, node]:
+                                                                            request_data(node.ip, node.port, IP, PORT, data_id)
+                                                                        return ACK
+    shut_down                                            
 ```
 
 # Store
@@ -51,9 +52,19 @@ def quit()
 ip_table
 data_table
 def store():
+    node_table <- add_data(ip_table, data_table, data, id)
+    for node in node_table:
+        send_data(node.ip, node.port, IP, PORT, data)
+                                                                    # 在存储数据后返回ACK, add_data内部判断是否存储
+                                                                    handle_send_data(sender.ip, sender.port, data)
+                                                                        node_table <- add_data(ip_table, data_table, data, id)
+                                                                        return ACK
 
 
 ```
+
+
+
 
 
 
