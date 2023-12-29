@@ -8,7 +8,7 @@ import socket
 
 from hash_ring import HashRing
 from network_layer import Node, Node_Table
-from data_layer import Data, DataTable, DataServer
+from data_layer import Data, DataTable, StorageServer
 
 
 # 返回node_table和data_table
@@ -27,31 +27,65 @@ def start_network():
     node_table = Node_Table(initial_nodes=initial_node)
 
 
-async def join_network():
+async def join_network(node_table, dest_port=8888):
     # 获取本机ip地址
     # ip = "192.168.52.1"
     ip = socket.gethostbyname(socket.gethostname())
-
     # 手动选取父亲节点ip，也可以改为探查所有存在的节点后选取
     parent_ip = "192.168.52.1"
 
     data = ip + "/" + parent_ip
-    flag = 'join'
-    encode_code = encode_message(flag, data)
+    request = b'JOIN\n\n'
+    # 向目标服务器发送请求
+    try:
+        for node in node_table:
+            if node.ip != ip:
+                reader, writer = await asyncio.open_connection(node.ip, dest_port)
+                writer.write(request)
+                writer.write(data.encode('utf-8'))
+                writer.write(b'\n\n')  # Using two newline characters as a separator
 
-async def quit_network():
+    except asyncio.TimeoutError:
+        print("Timeout occurred when download_from_remote.")
+    except OSError as e:
+        print(f"Connection failed when download_from_remote. Error: {e}.")
+        await asyncio.sleep(10)
+        print("Retrying...")
+
+    finally:
+        if 'writer' in locals():
+            writer.close()
+            await writer.wait_closed()
+
+
+async def quit_network(node_table, dest_port):
     # 获取本机ip地址
     # ip = "192.168.52.1"
     ip = socket.gethostbyname(socket.gethostname())
-
     # 手动选取父亲节点ip，也可以改为探查所有存在的节点后选取
 
-
     data = ip
-    flag = 'quit'
+    request = b'QUIT\n\n'
+    # 向目标服务器发送请求
+    try:
+        for node in node_table:
+            if node.ip != ip:
+                reader, writer = await asyncio.open_connection(node.ip, dest_port)
+                writer.write(request)
+                writer.write(data.encode('utf-8'))
+                writer.write(b'\n\n')  # Using two newline characters as a separator
 
-    encode_code = encode_message(flag, data)
+    except asyncio.TimeoutError:
+        print("Timeout occurred when download_from_remote.")
+    except OSError as e:
+        print(f"Connection failed when download_from_remote. Error: {e}.")
+        await asyncio.sleep(10)
+        print("Retrying...")
 
+    finally:
+        if 'writer' in locals():
+            writer.close()
+            await writer.wait_closed()
 
 
 
@@ -78,10 +112,10 @@ async def read_data():
     pass
 
 
-async def download_from_remote(self, data: Data, ip, port, timeout=1000):
+async def download_from_remote(data: Data, dest_ip, dest_port, timeout=1000):
     request = b'DOWNLOAD\n\n'
     try:
-        reader, writer = await asyncio.open_connection(ip, port)
+        reader, writer = await asyncio.open_connection(dest_ip, dest_port)
         data0 = {
             "id": data.id,
             "save_hash": data.save_hash,
@@ -125,14 +159,17 @@ async def start_service():
     data_table = DataTable()
 
     # 更多运行示例可见test_data_layer.py
-    data_server = DataServer(data_table=data_table, node_id='node1', ring=HashRing(), ip='127.0.0.1',
-                             port=port_data_service)
+    storage_server = StorageServer(data_table=data_table, node_id='node1', ring=HashRing(), ip='127.0.0.1',
+                                port=port_data_service)
 
     # Create tasks for running servers, 这里还可以添加其他异步任务
     tasks = [
-        asyncio.create_task(data_server.run())
+        asyncio.create_task(storage_server.run())
     ]
 
     # Run all tasks concurrently
     await asyncio.gather(*tasks)
 
+
+if __name__ == "__main__":
+    asyncio.run(start_service())

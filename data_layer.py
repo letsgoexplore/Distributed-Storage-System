@@ -28,18 +28,18 @@ class Data:
             return self.title == other.title
         return False
 
-    async def send_data(self, ip, port=8888, request=b'SEND_DATA\n\n', timeout=100):
+    async def send_data(self, dest_ip, dest_port=8888, request=b'SEND_DATA\n\n', timeout=100):
         """
             用于将本Data对象发送至指定节点
             :param request: 发送该数据包的请求：SEND_DATA or REPLY_DOWNLOAD
-            :param ip: 目的ip
-            :param port: 目的端口，可使用缺省值8888
+            :param dest_ip: 目的ip
+            :param dest_port: 目的端口，可使用缺省值8888
             :param timeout： 超时上限，缺省值100s
 
             """
         while True:
             try:
-                reader, writer = await asyncio.open_connection(ip, port)
+                reader, writer = await asyncio.open_connection(dest_ip, dest_port)
 
                 ## 1 Prepare non-binary data/准备非二进制数据
                 data = {
@@ -131,8 +131,8 @@ class DataTable:
         except FileNotFoundError:
             print(f"File '{filename}' not found. Initializing with an empty table.")
 
-    async def request_data_table(self, ip, port):
-        reader, writer = await asyncio.open_connection(ip, port)
+    async def request_data_table(self, dest_ip, dest_port):
+        reader, writer = await asyncio.open_connection(dest_ip, dest_port)
         try:
             # 发送请求
             writer.write(b'REQUEST_DATA_TABLE\n\n')
@@ -158,7 +158,7 @@ class DataTable:
         await writer.wait_closed()
 
 
-class DataServer:
+class StorageServer:
     def __init__(self, data_table: DataTable, node_id: str, ring: HashRing, ip: str='127.0.0.1', port: int=8888):
         self.data_table = data_table
         self.node_id = node_id
@@ -211,7 +211,10 @@ class DataServer:
                 pdf_data = file.read()
             writer.write(pdf_data)
 
-    async def handle_join_network(self, data):
+    async def handle_join_network(self, writer, reader):
+        data = await reader.readuntil(b'\n\n')
+        data = data[:-2]
+
         data = data.split("/")
         ip = data[0]
         parent_ip = data[1]
@@ -230,17 +233,25 @@ class DataServer:
             json_dir["IPs_nodes"] = node_table.nodes
             json_dir["IPs_next_nodes"] = node_table.next_nodes
             json_dir["IPs_pre_nodes"] = node_table.pre_nodes
-            data = json.dumps(json_dir)
-            flag = "update"
+            json_data = json.dumps(json_dir)
+            request = b"UPDATE_NET\n\n"
             # send message，将该json_str(字符串)发送给请求加入的节点，让他更新node table
 
-    async def handle_update_network(self, data):
+            writer.write(json_data.encode('utf-8'))
+            writer.write(b'\n\n')  # Using two newline characters as a separator
+
+    async def handle_update_network(self, writer, reader, data):
+        data = await reader.readuntil(b'\n\n')
+        data = data[:-2]
+
         json_dir = json.loads(data)
         node_table = Node_Table(initial_nodes=None)
         node_table.update(nodes=json_dir["IPs_nodes"], next_nodes=json_dir["IPs_next_nodes"],
                           pre_nodes=json_dir["IPs_pre_nodes"])
 
-    async def handle_quit_network(data):
+    async def handle_quit_network(self, writer, reader, data):
+        data = await reader.readuntil(b'\n\n')
+        data = data[:-2]
 
         ip = data
         node_table = Node_Table(new_start=False)

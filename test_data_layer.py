@@ -2,7 +2,7 @@ from __future__ import annotations
 import asyncio
 import shutil
 from hash_ring import HashRing
-from data_layer import Data, DataTable, DataServer
+from data_layer import Data, DataTable, StorageServer
 import os
 import json
 import aiofiles
@@ -54,7 +54,7 @@ async def main():
     os.makedirs(os.path.dirname('./storage/'), exist_ok=True)
     os.makedirs(os.path.dirname('./download/'), exist_ok=True)
     ring = HashRing(['1', '2', '3'])
-    data_server = DataServer(data_table=data_table, node_id='node1', ring=ring, ip='127.0.0.1', port=port_data_service)
+    data_server = StorageServer(data_table=data_table, node_id='node1', ring=ring, ip='127.0.0.1', port=port_data_service)
 
     # Create tasks for running servers
     tasks = [
