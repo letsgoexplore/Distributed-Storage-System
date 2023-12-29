@@ -77,3 +77,8 @@ ipython_config.py
 .python-version
 
 .idea/
+.vscode/
+files/
+temp/
+storage/
+download/
