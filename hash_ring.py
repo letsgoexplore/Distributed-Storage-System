@@ -34,6 +34,7 @@
 import math
 import sys
 from bisect import bisect
+import hashlib
 
 if sys.version_info >= (2, 5):
     import hashlib
@@ -42,124 +43,106 @@ else:
     import md5
     md5_constructor = md5.new
 
-class HashRing(object):
 
-    def __init__(self, nodes=None, weights=None):
-        """`nodes` is a list of objects that have a proper __str__ representation.
-        `weights` is dictionary that sets weights to the nodes.  The default
-        weight is that all nodes are equal.
-        """
-        self.ring = dict()
-        self._sorted_keys = []
 
-        self.nodes = nodes
-
-        if not weights:
-            weights = {}
-        self.weights = weights
-
-        self._generate_circle()
-
-    def _generate_circle(self):
-        """Generates the circle.
-        """
-        total_weight = 0
-        for node in self.nodes:
-            total_weight += self.weights.get(node, 1)
-
-        for node in self.nodes:
-            weight = 1
-
-            if node in self.weights:
-                weight = self.weights.get(node)
-
-            factor = math.floor((40*len(self.nodes)*weight) / total_weight);
-
-            for j in range(0, int(factor)):
-                b_key = self._hash_digest( '%s-%s' % (node, j) )
-
-                for i in range(0, 3):
-                    key = self._hash_val(b_key, lambda x: x+i*4)
-                    self.ring[key] = node
-                    self._sorted_keys.append(key)
-
-        self._sorted_keys.sort()
-
-    def get_node(self, string_key):
-        """Given a string key a corresponding node in the hash ring is returned.
-
-        If the hash ring is empty, `None` is returned.
-        """
-        pos = self.get_node_pos(string_key)
-        if pos is None:
-            return None
-        return self.ring[ self._sorted_keys[pos] ]
-
-    def get_node_pos(self, string_key):
-        """Given a string key a corresponding node in the hash ring is returned
-        along with it's position in the ring.
-
-        If the hash ring is empty, (`None`, `None`) is returned.
-        """
-        if not self.ring:
-            return None
-
-        key = self.gen_key(string_key)
-
-        nodes = self._sorted_keys
-        pos = bisect(nodes, key)
-
-        if pos == len(nodes):
-            return 0
-        else:
-            return pos
-
-    def iterate_nodes(self, string_key, distinct=True):
-        """Given a string key it returns the nodes as a generator that can hold the key.
-
-        The generator iterates one time through the ring
-        starting at the correct position.
-
-        if `distinct` is set, then the nodes returned will be unique,
-        i.e. no virtual copies will be returned.
-        """
-        if not self.ring:
-            yield None, None
-
-        returned_values = set()
-        def distinct_filter(value):
-            if str(value) not in returned_values:
-                returned_values.add(str(value))
-                return value
-
-        pos = self.get_node_pos(string_key)
-        for key in self._sorted_keys[pos:]:
-            val = distinct_filter(self.ring[key])
-            if val:
-                yield val
-
-        for i, key in enumerate(self._sorted_keys):
-            if i < pos:
-                val = distinct_filter(self.ring[key])
-                if val:
-                    yield val
+class Hash:
+    def __init__(self, id):
+        self.id = id
+        self.hash = self.gen_key(id)
 
     def gen_key(self, key):
         """Given a string key it returns a long value,
         this long value represents a place on the hash ring.
-
         md5 is currently used because it mixes well.
         """
         b_key = self._hash_digest(key)
         return self._hash_val(b_key, lambda x: x)
 
     def _hash_val(self, b_key, entry_fn):
-        return (( b_key[entry_fn(3)] << 24)
-                |(b_key[entry_fn(2)] << 16)
-                |(b_key[entry_fn(1)] << 8)
-                | b_key[entry_fn(0)] )
+        """Generates a hash value from a byte key."""
+        return ((b_key[entry_fn(3)] << 24)
+                | (b_key[entry_fn(2)] << 16)
+                | (b_key[entry_fn(1)] << 8)
+                |  b_key[entry_fn(0)])
 
     def _hash_digest(self, key):
-        m = md5_constructor()
-        m.update(bytes(key, 'utf-8'))
+        """Generates a byte digest for a key using MD5."""
+        m = hashlib.md5()
+        m.update(key.encode('utf-8'))
         return list(map(int, m.digest()))
+
+    def __eq__(self, other):
+        return self.hash == other.hash
+
+    def __lt__(self, other):
+        return self.hash < other.hash
+
+    def __gt__(self, other):
+        return self.hash > other.hash
+
+
+class HashRing:
+    def __init__(self):
+        self.sorted_hashes = []
+        self.nodes = {}
+
+    def add_node(self, node):
+        """adding node to hashring"""
+        hash_obj = Hash(node.id)  # using id to generate Hash object
+        bisect.insort(self.sorted_hashes, hash_obj)
+        self.nodes[hash_obj.hash] = node  # using hash as the key
+
+    def remove_node(self, node_id):
+        """remove a node from"""
+        hash_obj = Hash(node_id)
+        if hash_obj.hash in self.nodes:
+            self.sorted_hashes.remove(hash_obj)
+            del self.nodes[hash_obj.hash]
+
+    def get_nodes_for_key(self, key):
+        """根据key获取哈希环上顺时针方向的后两个节点"""
+        hash_key_obj = Hash(key)  # 创建一个Hash对象而不是直接使用整数哈希值
+        index = bisect.bisect_right(self.sorted_hashes, hash_key_obj) % len(self.sorted_hashes)
+        next_nodes = [self.sorted_hashes[(index + i) % len(self.sorted_hashes)] for i in range(2)]
+        return [self.nodes[node.hash] for node in next_nodes]
+    
+    def print_all_nodes(self):
+        """打印所有节点的信息"""
+        for node in self.nodes.values():
+            print(f"ID: {node.id}, IP: {node.ip}, Port: {node.port}")
+
+    def add_node_and_list_change(self, data_list, new_node):
+        """计算添加新节点后哈希环上的变化"""
+        changes = []
+
+        # 计算添加节点前的情况
+        before_addition = {item.id: self.get_nodes_for_key(item.id) for item in data_list}
+
+        # 添加新节点
+        self.add_node(new_node)
+
+        # 计算添加节点后的情况并比较
+        for item in data_list:
+            after_addition = self.get_nodes_for_key(item.id)
+            if before_addition[item.id] != after_addition:
+                changes.append((item, before_addition[item.id], after_addition))
+
+        return changes
+    
+    def remove_node_and_list_change(self, data_list, remove_node_id):
+        """计算删除节点后哈希环上的变化"""
+        changes = []
+
+        # 计算删除节点前的情况
+        before_removal = {item.id: self.get_nodes_for_key(item.id) for item in data_list}
+
+        # 删除节点
+        self.remove_node(remove_node_id)
+
+        # 计算删除节点后的情况并比较
+        for item in data_list:
+            after_removal = self.get_nodes_for_key(item.id)
+            if before_removal[item.id] != after_removal:
+                changes.append((item, before_removal[item.id], after_removal))
+
+        return changes
