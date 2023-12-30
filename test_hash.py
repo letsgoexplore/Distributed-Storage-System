@@ -118,7 +118,7 @@ hash_ring.print_all_nodes()
 
 # 计算添加新节点后的变化
 print("----------- start adding -------------")
-data_list = [Node("node3", "192.168.1.3", 8080), Node("node4", "192.168.1.4", 8080)]
+data_list = [Node("node3", "192.168.1.3", 8080), Node("node4", "192.168.1.4", 8080)] # 这里之所以还是node是没有创建Data类，实际上应该是Data
 new_node = Node("node5", "192.168.1.5", 8080)
 changes = hash_ring.add_node_and_list_change(data_list, new_node)
 for change in changes:
@@ -130,7 +130,7 @@ hash_ring.print_all_nodes()
 
 # 删除部分节点
 print("----------- start deleting -------------")
-data_list = [Node("node3", "192.168.1.3", 8080), Node("node4", "192.168.1.4", 8080)]
+data_list = [Node("node3", "192.168.1.3", 8080), Node("node4", "192.168.1.4", 8080)] # 这里之所以还是node是没有创建Data类，实际上应该是Data
 remove_node_id = "node2"  # 假设我们要删除的节点ID
 changes = hash_ring.remove_node_and_list_change(data_list, remove_node_id)
 for change in changes:
