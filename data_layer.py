@@ -211,7 +211,58 @@ class StorageServer:
                 pdf_data = file.read()
             writer.write(pdf_data)
 
-    async def handle_join_network(self, writer, reader):
+    async def handle_request_data(self, writer, reader):
+        data = await reader.readuntil(b'\n\n')
+        json_data = json.loads(data.decode('utf-8'))
+        received_data = Data(
+            id=json_data['id'],
+            save_hash=json_data['save_hash'],
+            title=json_data['title'],
+            path=json_data['path'],
+            check_hash=json_data['check_hash'])
+
+        # 认为向你发起download的请求，则已知你拥有这个文件，还是判断一下，但应该没问题（如果达成前面的共识的话）
+        if received_data in self.data_table:
+            with open(received_data.save_path, 'rb') as file:
+                pdf_data = file.read()
+            writer.write(pdf_data)
+
+    async def request_data(self, data:Data, ip):
+        request = b'REQUEST_DATA\n\n'
+        try:
+            reader, writer = await asyncio.open_connection(ip, 8888)
+            data0 = {
+                "id": data.id,
+                "save_hash": data.save_hash,
+                "title": data.title,
+                "path": data.path,
+                "check_hash": data.check_hash,
+                "file_size": data.file_size}
+            json_data = json.dumps(data0).encode('utf-8')
+            writer.write(request)
+            writer.write(json_data)
+            writer.write(b'\n\n')  # 使用两个换行符作为分隔符
+            await writer.drain()
+            pdf_data = await reader.readexactly(data.file_size)
+            save_path = data.save_path
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            async with aiofiles.open(save_path, 'wb') as file:
+                await file.write(pdf_data)
+
+        except asyncio.TimeoutError:
+            print("Timeout occurred when download_from_remote.")
+        except OSError as e:
+            print(f"Connection failed when download_from_remote. Error: {e}.")
+            await asyncio.sleep(10)
+            print("Retrying...")
+
+        finally:
+            if 'writer' in locals():
+                writer.close()
+                await writer.wait_closed()
+
+
+    async def handle_join_network(self, reader, writer):
         data = await reader.readuntil(b'\n\n')
         data = data[:-2]
 
@@ -241,7 +292,25 @@ class StorageServer:
             writer.write(json_data.encode('utf-8'))
             writer.write(b'\n\n')  # Using two newline characters as a separator
 
-    async def handle_update_network(self, writer, reader):
+        new_ring = HashRing(node_table)
+        for data in self.data_table:
+            node1, node2 = self.ring.ring_map_node(data.title)
+            node11, node22 = new_ring.ring_map_node(data.title)
+            # 原来存的，现在不需要存的，删除
+            if self.node_id == node1 or self.node_id == node2:
+                if not (self.node_id == node11 or self.node_id == node22):
+                    try:
+                        os.remove(data.save_path)
+                    except OSError as e:
+                        print(f"Error deleting file '{data.save_path}': {e}")
+            # 原来没存现在需要存的
+            else:
+                if self.node_id == node11 or self.node_id == node22:
+                    # 理论上，原来存储的第一个节点一定不会删除数据
+                    await self.request_data(data, node1.ip)
+        self.ring = new_ring
+
+    async def handle_update_network(self, reader, writer):
         data = await reader.readuntil(b'\n\n')
         data = data[:-2]
 
@@ -250,13 +319,15 @@ class StorageServer:
         node_table.update(nodes=json_dir["IPs_nodes"], next_nodes=json_dir["IPs_next_nodes"],
                           pre_nodes=json_dir["IPs_pre_nodes"])
 
-    async def handle_quit_network(self, writer, reader):
+    async def handle_quit_network(self, reader, writer):
         data = await reader.readuntil(b'\n\n')
         data = data[:-2]
 
         ip = data
         node_table = Node_Table(new_start=False)
         node_table.remove_node(ip)
+        new_ring = HashRing(node_table)
+        self.ring = new_ring
 
     # 对应operation中的decode_message()
     async def handle_client(self, reader, writer):
@@ -266,6 +337,9 @@ class StorageServer:
             if request == b'REQUEST_DATA_TABLE\n\n':
                 print("Client requested Data_Table")
                 await self.handle_request_data_table(reader, writer)
+
+            elif request == b'REQUEST_DATA\n\n':
+                await self.handle_request_data(reader, writer)
 
             # 收到数据
             elif request == b'SEND_DATA\n\n':
@@ -303,3 +377,4 @@ class StorageServer:
 
         except Exception as e:
             print(f"Error during run DataServer: {e}")
+
