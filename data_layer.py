@@ -307,8 +307,9 @@ class StorageServer:
             else:
                 if self.node_id == node11 or self.node_id == node22:
                     # 理论上，原来存储的第一个节点一定不会删除数据
-                    await self.request_data(data, node1)
+                    await self.request_data(data, node1.ip)
         self.ring = new_ring
+
     async def handle_update_network(self, reader, writer):
         data = await reader.readuntil(b'\n\n')
         data = data[:-2]
@@ -325,6 +326,8 @@ class StorageServer:
         ip = data
         node_table = Node_Table(new_start=False)
         node_table.remove_node(ip)
+        new_ring = HashRing(node_table)
+        self.ring = new_ring
 
     # 对应operation中的decode_message()
     async def handle_client(self, reader, writer):
