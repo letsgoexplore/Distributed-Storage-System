@@ -64,7 +64,7 @@ async def join_network(node_table:Node_Table, dest_port=8888):
     await asyncio.gather(*(connect_to_node(node) for node in node_table.nodes if node.ip != ip))
 
 
-async def quit_network(node_table:Node_Table, data_table:DataTable, ring:HashRing, dest_port):
+async def quit_network(node_table:Node_Table, data_table:DataTable, ring:HashRing, self_node, dest_port):
     # 获取本机ip地址
     # ip = "192.168.52.1"
     ip = socket.gethostbyname(socket.gethostname())
@@ -98,16 +98,17 @@ async def quit_network(node_table:Node_Table, data_table:DataTable, ring:HashRin
     # TODO
     # 这里遍历有问题，得仔细看一下怎么广播
     await asyncio.gather(*(connect_to_node(node) for node in node_table.nodes if node.ip != ip))
-    await asyncio.sleep(1) # 等待其他节点的node_table更新完成，理论上应该不需要
+    await asyncio.sleep(1)     # 等待其他节点的node_table更新完成，理论上应该不需要
     need_to_send_list = []
     for data in data_table:
-        if data.need_to_save(ring, "node_id or sth"):
+        if data.need_to_save(ring, self_node):
             need_to_send_list.append(data)
     if len(need_to_send_list) > 0:
         node_table.remove_node(ip)
-        new_ring = HashRing(node_table)
+        # new_ring = HashRing(node_table)
+        ring.remove_node(self_node)
         # title是被hash的内容，给出存储的两个节点
-        node1, node2 = ring.ring_map_node(need_to_send_list[0].title)
+        node1, node2 = ring.get_nodes_for_key(need_to_send_list[0].title)
         for data in need_to_send_list:
             await data.send_data(node1.ip, dest_port=dest_port)
             await data.send_data(node2.ip, dest_port=dest_port)
