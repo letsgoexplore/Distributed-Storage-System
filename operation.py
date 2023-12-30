@@ -106,7 +106,8 @@ async def quit_network(node_table:Node_Table, data_table:DataTable, ring:HashRin
     if len(need_to_send_list) > 0:
         node_table.remove_node(ip)
         new_ring = HashRing(node_table)
-        node1, node2 = ring_map_node(need_to_send_list[0].title)
+        # title是被hash的内容，给出存储的两个节点
+        node1, node2 = ring.ring_map_node(need_to_send_list[0].title)
         for data in need_to_send_list:
             await data.send_data(node1.ip, dest_port=dest_port)
             await data.send_data(node2.ip, dest_port=dest_port)
