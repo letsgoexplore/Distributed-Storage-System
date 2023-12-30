@@ -237,10 +237,11 @@ class StorageServer:
             request = b"UPDATE_NET\n\n"
             # send message，将该json_str(字符串)发送给请求加入的节点，让他更新node table
 
+            writer.write(request)
             writer.write(json_data.encode('utf-8'))
             writer.write(b'\n\n')  # Using two newline characters as a separator
 
-    async def handle_update_network(self, writer, reader, data):
+    async def handle_update_network(self, writer, reader):
         data = await reader.readuntil(b'\n\n')
         data = data[:-2]
 
@@ -249,7 +250,7 @@ class StorageServer:
         node_table.update(nodes=json_dir["IPs_nodes"], next_nodes=json_dir["IPs_next_nodes"],
                           pre_nodes=json_dir["IPs_pre_nodes"])
 
-    async def handle_quit_network(self, writer, reader, data):
+    async def handle_quit_network(self, writer, reader):
         data = await reader.readuntil(b'\n\n')
         data = data[:-2]
 
@@ -271,13 +272,13 @@ class StorageServer:
                 await self.handle_send_data(reader, writer)
 
             elif request == b'JOIN\n\n':
-                pass
+                await self.handle_join_network(reader, writer)
 
             elif request == b'QUIT\n\n':
-                pass
+                await self.handle_quit_network(reader, writer)
 
             elif request == b'UPDATE_NET\n\n':
-                pass
+                await self.handle_update_network(reader, writer)
 
             elif request == b'DOWNLOAD\n\n':
                 await self.handle_download(reader, writer)
