@@ -84,16 +84,16 @@ class Data:
 
     # function: using Consistent Hashing Algorithm to decide whether to save
     def need_to_save(self, ring: HashRing, node_id: str):
-        return True  # for debug
+        # return True  # for debug
         # 等确定方案再放出来 ↓
 
-        # node_generator = ring.iterate_nodes(self.title)
-        # # 映射到哈希环使用的两个节点
-        # for node in islice(node_generator, 2):
-        #     if node_id == node:
-        #         return True
-        #     # print(f"Key '{self.path}' maps to node: {node}")
-        # return False
+        nodes = ring.get_nodes_for_key(self.title)
+        # 映射到哈希环使用的两个节点
+        for node in nodes:
+            if node_id == node.id:
+                return True
+            # print(f"Key '{self.path}' maps to node: {node}")
+        return False
 
     # currently assume no transmission error
     def verify_file_with_check_hash(self):
@@ -292,23 +292,36 @@ class StorageServer:
             writer.write(json_data.encode('utf-8'))
             writer.write(b'\n\n')  # Using two newline characters as a separator
 
-        new_ring = HashRing(node_table)
-        for data in self.data_table:
-            node1, node2 = self.ring.ring_map_node(data.title)
-            node11, node22 = new_ring.ring_map_node(data.title)
-            # 原来存的，现在不需要存的，删除
-            if self.node_id == node1 or self.node_id == node2:
-                if not (self.node_id == node11 or self.node_id == node22):
+        # new_ring = HashRing(node_table)
+        changes = self.ring.add_node_and_list_change(self.data_table, node.id)
+        for change in changes:
+            item, nodes_before, nodes_after = change
+            if self.node_id in nodes_before:
+                if self.node_id not in nodes_after:
                     try:
-                        os.remove(data.save_path)
+                        os.remove(item.save_path)
                     except OSError as e:
                         print(f"Error deleting file '{data.save_path}': {e}")
-            # 原来没存现在需要存的
             else:
-                if self.node_id == node11 or self.node_id == node22:
+                if self.node_id in nodes_after:
                     # 理论上，原来存储的第一个节点一定不会删除数据
-                    await self.request_data(data, node1.ip)
-        self.ring = new_ring
+                    await self.request_data(data, nodes_before[0].ip)
+        # for data in self.data_table:
+        #     node1, node2 = self.ring.ring_map_node(data.title)
+        #     node11, node22 = new_ring.ring_map_node(data.title)
+        #     # 原来存的，现在不需要存的，删除
+        #     if self.node_id == node1 or self.node_id == node2:
+        #         if not (self.node_id == node11 or self.node_id == node22):
+        #             try:
+        #                 os.remove(data.save_path)
+        #             except OSError as e:
+        #                 print(f"Error deleting file '{data.save_path}': {e}")
+        #     # 原来没存现在需要存的
+        #     else:
+        #         if self.node_id == node11 or self.node_id == node22:
+        #             # 理论上，原来存储的第一个节点一定不会删除数据
+        #             await self.request_data(data, node1.ip)
+        # self.ring = new_ring
 
     async def handle_update_network(self, reader, writer):
         data = await reader.readuntil(b'\n\n')
@@ -318,6 +331,15 @@ class StorageServer:
         node_table = Node_Table(initial_nodes=None)
         node_table.update(nodes=json_dir["IPs_nodes"], next_nodes=json_dir["IPs_next_nodes"],
                           pre_nodes=json_dir["IPs_pre_nodes"])
+        # 如何给接入节点ring的结构是个问题↓ TODO
+        ring = HashRing(node_table)
+        await asyncio.sleep(1)  # 等待其他节点的node_table更新完成，理论上应该不需要
+        for data in self.data_table:
+            if data.need_to_save(ring, self.node_id):
+                nodes = self.ring.get_nodes_for_key(data.title)
+                for node in nodes:
+                    if node.id != node.id:
+                        await self.request_data(data, node.ip)
 
     async def handle_quit_network(self, reader, writer):
         data = await reader.readuntil(b'\n\n')
@@ -326,8 +348,12 @@ class StorageServer:
         ip = data
         node_table = Node_Table(new_start=False)
         node_table.remove_node(ip)
-        new_ring = HashRing(node_table)
-        self.ring = new_ring
+
+        # 如何初始化↓ TODO
+        node = Node(ip)
+        self.ring.remove_node(node.id)
+        # new_ring = HashRing(node_table)
+        # self.ring = new_ring
 
     # 对应operation中的decode_message()
     async def handle_client(self, reader, writer):
