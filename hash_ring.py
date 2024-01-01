@@ -124,27 +124,22 @@ class HashRing(object):
         index = bisect.bisect_right(self.sorted_hashes, hash_key_obj) % len(self.sorted_hashes)
         next_nodes = [self.sorted_hashes[(index + i) % len(self.sorted_hashes)] for i in range(2)]
         return [self.nodes[node.hash] for node in next_nodes]
-    
-    def print_all_nodes(self):
-        """打印所有节点的信息"""
-        for node in self.nodes.values():
-            print(f"ID: {node.id}, IP: {node.ip}, Port: {node.port}")
 
     def add_node_and_list_change(self, data_list, new_node):
         """计算添加新节点后哈希环上的变化"""
         changes = []
 
         # 计算添加节点前的情况
-        before_addition = {item.id: self.get_nodes_for_key(item.id) for item in data_list}
+        before_addition = {item.title: self.get_nodes_for_key(item.title) for item in data_list}
 
         # 添加新节点
         self.add_node(new_node)
 
         # 计算添加节点后的情况并比较
         for item in data_list:
-            after_addition = self.get_nodes_for_key(item.id)
-            if before_addition[item.id] != after_addition:
-                changes.append((item, before_addition[item.id], after_addition))
+            after_addition = self.get_nodes_for_key(item.title)
+            if before_addition[item.title] != after_addition:
+                changes.append((item, before_addition[item.title], after_addition))
 
         return changes
     
@@ -153,15 +148,15 @@ class HashRing(object):
         changes = []
 
         # 计算删除节点前的情况
-        before_removal = {item.id: self.get_nodes_for_key(item.id) for item in data_list}
+        before_removal = {item.title: self.get_nodes_for_key(item.title) for item in data_list}
 
         # 删除节点
         self.remove_node(remove_node_id)
 
         # 计算删除节点后的情况并比较
         for item in data_list:
-            after_removal = self.get_nodes_for_key(item.id)
-            if before_removal[item.id] != after_removal:
-                changes.append((item, before_removal[item.id], after_removal))
+            after_removal = self.get_nodes_for_key(item.title)
+            if before_removal[item.title] != after_removal:
+                changes.append((item, before_removal[item.title], after_removal))
 
         return changes

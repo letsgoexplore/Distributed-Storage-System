@@ -31,7 +31,7 @@ class NodeTable(HashRing):
         """turning NodeTable into utf-8"""
         data = {
             "sorted_hashes": [h.to_dict() for h in self.sorted_hashes],
-            "nodes": [n.to_dict() for n in self.nodes]
+            "nodes": [self.nodes[n].to_dict() for n in self.nodes]
         }
         return json.dumps(data).encode('utf-8')
     
@@ -39,6 +39,12 @@ class NodeTable(HashRing):
         data = json.loads(encoded_data.decode('utf-8'))
         self.sorted_hashes = [Hash.from_dict(h) for h in data["sorted_hashes"]]
         self.nodes = [Node.from_dict(n) for n in data["nodes"]]
+    
+        
+    def print_all_nodes(self):
+        """打印所有节点的信息"""
+        for node in self.nodes.values():
+            print(f"ID: {node.id}, IP: {node.ip}, Port: {node.port}")
     
     async def request_data_table(self):
         pass
