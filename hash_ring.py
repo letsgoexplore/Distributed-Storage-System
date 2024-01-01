@@ -109,14 +109,19 @@ class HashRing(object):
         """adding node to hashring"""
         hash_obj = Hash(node.id)  # using id to generate Hash object
         bisect.insort(self.sorted_hashes, hash_obj)
-        self.nodes[hash_obj.hash] = node  # using hash as the key
+        self.nodes.append(node)  # using hash as the key
 
     def remove_node(self, node_id):
         """remove a node from"""
         hash_obj = Hash(node_id)
-        if hash_obj.hash in self.nodes:
+        if hash_obj in self.sorted_hashes:
             self.sorted_hashes.remove(hash_obj)
-            del self.nodes[hash_obj.hash]
+            for node in self.nodes:
+                if node.id == node_id:
+                    self.nodes.remove(node)
+        # if hash_obj.hash in self.nodes:
+        #     self.sorted_hashes.remove(hash_obj)
+        #     del self.nodes[hash_obj.hash]
 
     def get_nodes_for_key(self, key):
         """根据key获取哈希环上顺时针方向的后两个节点"""
@@ -125,10 +130,9 @@ class HashRing(object):
         next_nodes_hash = [self.sorted_hashes[(index + i) % len(self.sorted_hashes)] for i in range(2)]
         next_nodes = []
         for node in self.nodes:
-            if Hash(node) in next_nodes_hash:
+            if Hash(node.id) in next_nodes_hash:
                 next_nodes.append(node)
         return next_nodes
-
 
     def add_node_and_list_change(self, data_list, new_node):
         """计算添加新节点后哈希环上的变化"""
