@@ -175,3 +175,32 @@ class Client:
 
 if __name__ == '__main__':
     client = Client("127.0.0.1", 8888)
+
+    client.request_node_table()
+    client.print_node_table()
+
+    client.request_data_table()
+    client.print_data_table()
+
+    while True:
+        command = input("Command:")
+        paras = command.split(' ')
+        # store path
+        if paras[0] == 'store':
+            path = paras[1]
+            client.send_data(path)
+        if paras[0] == 'download':
+            id = paras[1]
+            data = client.data_table.datas[id]
+        if paras[0] == 'data_table':
+            client.request_data_table()
+            client.print_data_table()
+        if paras[0] == 'node_table':
+            client.request_node_table()
+            client.print_node_table()
+        if paras[0] == 'quit':
+            quit = input('press [y] to quit')
+            if quit == 'y':
+                break
+            else:
+                print("continue working")

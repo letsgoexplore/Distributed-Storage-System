@@ -8,7 +8,7 @@ import socket
 
 from hash_ring import HashRing
 from network_layer import Node, NodeTable
-from data_layer import Data, DataTable, StorageServer
+from data_layer import Data, DataTable
 
 from Config import ROOT_IP, ROOT_PORT
 
@@ -186,7 +186,6 @@ class StorageServer:
                     writer.close()
                     await writer.wait_closed()
 
-    
     # TODO
     async def handle_request_node_table(self, reader, writer):
         data = await reader.readuntil(b'\n\n')
