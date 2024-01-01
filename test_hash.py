@@ -42,7 +42,7 @@ class Hash:
     def __gt__(self, other):
         return self.hash > other.hash
 
-class HashRing:
+class HashRing(object):
     def __init__(self):
         self.sorted_hashes = []
         self.nodes = {}

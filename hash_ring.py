@@ -35,6 +35,7 @@ import math
 import sys
 from bisect import bisect
 import hashlib
+import copy
 
 if sys.version_info >= (2, 5):
     import hashlib
@@ -81,10 +82,17 @@ class Hash:
         return self.hash > other.hash
 
 
-class HashRing:
+class HashRing(object):
     def __init__(self):
         self.sorted_hashes = []
         self.nodes = {}
+    
+    def clone(self):
+        """clone function"""
+        new_ring = HashRing()
+        new_ring.sorted_hashes = copy.deepcopy(self.sorted_hashes)
+        new_ring.nodes = copy.deepcopy(self.nodes)
+        return new_ring
 
     def add_node(self, node):
         """adding node to hashring"""

@@ -17,8 +17,6 @@ def join()
                                                                          DataTable:add_node(id)}
     node_table <- request_node_table(ROOT_IP, ROOT_PORT, IP, PORT)
                                                                     handle_request_node_table(发送table)
-    data_table <- request_data_table(ROOT_IP, ROOT_PORT, IP, PORT)
-                                                                    handle_request_data_table(发送table)
     for node in node_table:
         join_request(node.ip, node.port, IP, PORT)
                                                                     handle_join_request(发送ACK; 更改node_table, data_table)

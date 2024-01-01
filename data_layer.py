@@ -100,7 +100,6 @@ class Data:
         return True
 
 
-
 class DataTable:
     def __init__(self, initial_datas=None):
         if initial_datas is None:
@@ -260,7 +259,6 @@ class StorageServer:
             if 'writer' in locals():
                 writer.close()
                 await writer.wait_closed()
-
 
     async def handle_join_network(self, reader, writer):
         data = await reader.readuntil(b'\n\n')
