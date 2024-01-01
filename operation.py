@@ -121,6 +121,7 @@ class StorageServer:
 
         # step 2: request node table from root node
         await self.request_node_table(ROOT_IP, ROOT_PORT)
+        await self.request_data_table(ROOT_IP, ROOT_PORT)
 
         # step 3: broadcast to all for join request
         tasks = [self.send_message(node.ip, node.port, join_request, data) for node in self.node_table.nodes if node.ip != self.ip and node.ip != ROOT_IP]
@@ -188,9 +189,6 @@ class StorageServer:
 
     # TODO
     async def handle_request_node_table(self, reader, writer):
-        data = await reader.readuntil(b'\n\n')
-        data = data[:-2]
-
         encode_table = self.node_table.encode()
         writer.write(encode_table)
         writer.write(b'\n\n')
@@ -447,8 +445,15 @@ async def download_from_remote(data: Data, dest_ip, dest_port, timeout=1000):
                 writer.close()
                 await writer.wait_closed()
 
-my_server = StorageServer(DataTable(), "root", NodeTable(), ROOT_IP, ROOT_PORT)
-asyncio.run(my_server.run_server())
+async def start_root_node():
+    my_server = StorageServer(DataTable(), "root", NodeTable(), ROOT_IP, ROOT_PORT)
+    StorageServer.start_network()
+    asyncio.run(my_server.run_server())
+
+async def start_node(id, ip, port):
+    my_server = StorageServer(DataTable(), id, NodeTable(), ip, port)
+    StorageServer.join_network()
+    asyncio.run(my_server.run_server())
 
 # async def start_service():
 #     # step 0: initiate
