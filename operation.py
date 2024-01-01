@@ -38,7 +38,7 @@ class RespondingServer:
 
                 # 收到数据
                 elif request == b'SEND_DATA\n\n':
-                    await self.handle_send_data(reader, writer)
+                    await self.handle_store_data(reader, writer)
 
                 elif request == b'JOIN\n\n':
                     await self.handle_join_network(reader, writer)
@@ -51,6 +51,10 @@ class RespondingServer:
 
                 elif request == b'DOWNLOAD\n\n':
                     await self.handle_download(reader, writer)
+                    
+                elif request == b'UPLOAD\n\n':
+                    await self.handle_upload(reader, writer)
+                    
                 else:
                     print("Unknown request from the client")
                 await writer.drain()
@@ -73,7 +77,7 @@ class RespondingServer:
         except Exception as e:
             print(f"Error during run DataServer: {e}")
     
-    def setup():
+    def setup(self):
         # 从json文件加载节点表
         Node_Table(initial_nodes=None, new_start=False)
     
@@ -81,7 +85,7 @@ class RespondingServer:
         # 构建初始化节点表，节点表被保存在json文件
         self.node_table.add_node(self.node)
 
-    async def send_message(dest_ip, dest_port, request, data):
+    async def send_message(self, dest_ip, dest_port, request, data):
         while True:
             try:
                 reader, writer = await asyncio.open_connection(dest_ip, dest_port)
@@ -90,7 +94,7 @@ class RespondingServer:
                 writer.write(b'\n\n')  # Using two newline characters as a separator
 
                 response = await asyncio.wait_for(reader.readuntil(b'\n\n'), 1.0)
-                if response == b'ACK':
+                if response == b'ACK\n\n':
                     print(f"Received ACK from {dest_ip}")
                     break
 
@@ -179,7 +183,7 @@ class RespondingServer:
         # self.ring = new_ring
 
     async def quit_network(self):
-        self.node_id + "/" + self.ip + "/" + self.port
+        data = self.node_id + "/" + self.ip + "/" + self.port
         request = b'QUIT\n\n'
         # 向目标服务器发送请求
 
@@ -240,9 +244,11 @@ class RespondingServer:
         pass
     
     # TODO
-    async def handle_request_node_table():
+    async def handle_request_node_table(self):
         pass
+
     # 只是个示例, 之后还要改，就是在store_data时，一定要先把他放到save_path中（默认: ./storage/）
+    # TODO
     async def store_data(id, title, path):
         data = Data(id=id, save_hash=0, title=title, path=path)
         save_path = data.save_path
@@ -277,44 +283,48 @@ class RespondingServer:
         if received_data not in self.data_table:
             self.data_table.add_data(received_data)
 
-        writer.write(b'ACK\n')
+        writer.write(b'ACK\n\n')
 
-    async def read_data():
+    async def read_data(self):
         pass
 
     async def request_data(self, data:Data, ip):
         request = b'REQUEST_DATA\n\n'
-        try:
-            reader, writer = await asyncio.open_connection(ip, 8888)
-            data0 = {
-                "id": data.id,
-                "save_hash": data.save_hash,
-                "title": data.title,
-                "path": data.path,
-                "check_hash": data.check_hash,
-                "file_size": data.file_size}
-            json_data = json.dumps(data0).encode('utf-8')
-            writer.write(request)
-            writer.write(json_data)
-            writer.write(b'\n\n')  # 使用两个换行符作为分隔符
-            await writer.drain()
-            pdf_data = await reader.readexactly(data.file_size)
-            save_path = data.save_path
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            async with aiofiles.open(save_path, 'wb') as file:
-                await file.write(pdf_data)
+        while True:
+            try:
+                reader, writer = await asyncio.open_connection(ip, 8888)
+                data0 = {
+                    "id": data.id,
+                    "save_hash": data.save_hash,
+                    "title": data.title,
+                    "path": data.path,
+                    "check_hash": data.check_hash,
+                    "file_size": data.file_size}
+                json_data = json.dumps(data0).encode('utf-8')
+                writer.write(request)
+                writer.write(json_data)
+                writer.write(b'\n\n')  # 使用两个换行符作为分隔符
+                await writer.drain()
+                pdf_data = await reader.readexactly(data.file_size)
+                save_path = data.save_path
+                os.makedirs(os.path.dirname(save_path), exist_ok=True)
+                async with aiofiles.open(save_path, 'wb') as file:
+                    await file.write(pdf_data)
+                break
 
-        except asyncio.TimeoutError:
-            print("Timeout occurred when download_from_remote.")
-        except OSError as e:
-            print(f"Connection failed when download_from_remote. Error: {e}.")
-            await asyncio.sleep(10)
-            print("Retrying...")
+            except asyncio.TimeoutError:
+                print("Timeout occurred when download_from_remote.")
+                await asyncio.sleep(10)
+                print("Retrying...")
+            except OSError as e:
+                print(f"Connection failed when download_from_remote. Error: {e}.")
+                await asyncio.sleep(10)
+                print("Retrying...")
 
-        finally:
-            if 'writer' in locals():
-                writer.close()
-                await writer.wait_closed()
+            finally:
+                if 'writer' in locals():
+                    writer.close()
+                    await writer.wait_closed()
     
     async def handle_request_data(self, writer, reader):
         """send back the requested file"""
@@ -334,8 +344,34 @@ class RespondingServer:
             writer.write(pdf_data)
 
     # TODO
-    async def request_data_table():
-        pass
+    async def request_data_table(self, dest_ip, dest_port):
+        while True:
+            try:
+                reader, writer = await asyncio.open_connection(dest_ip, dest_port)
+                # 发送请求
+                writer.write(b'REQUEST_DATA_TABLE\n\n')
+                await writer.drain()
+
+                # 接收数据
+                data = await reader.readuntil(b'\n\n')
+                json_data_table = json.loads(data.decode('utf-8'))
+                data_dict_list = json_data_table
+                # 将数据字典转换回Data对象
+                self.data_table.datas = [
+                    Data(id=data_dict['id'], save_hash=data_dict['save_hash'], title=data_dict['title'],
+                         path=data_dict['path'], check_hash=data_dict['check_hash'])
+                    for data_dict in data_dict_list
+                ]
+                break
+
+            except Exception as e:
+                print(f"Error during request_data_table: {e}")
+                await asyncio.sleep(10)
+                print("Retrying...")
+
+            finally:
+                writer.close()
+                await writer.wait_closed()
 
     async def handle_request_data_table(self, reader, writer):
         """send back data table without exact file"""
@@ -347,14 +383,6 @@ class RespondingServer:
         json_data = json.dumps(data_dict_list)
         writer.write(json_data.encode('utf-8'))
         writer.write(b'\n\n')  # Using two newline characters as a separator
-
-    
-
-    
-
-    
-
-    
 
     async def handle_update_network(self, reader, writer):
         data = await reader.readuntil(b'\n\n')
@@ -389,42 +417,116 @@ class RespondingServer:
         # self.ring = new_ring
 
     # 对应operation中的decode_message()
-    
+    async def handle_download(self, reader, writer):
+        data = await reader.readuntil(b'\n\n')
+        json_data = json.loads(data.decode('utf-8'))
+        received_data = Data(
+            id=json_data['id'],
+            save_hash=json_data['save_hash'],
+            title=json_data['title'],
+            path=json_data['path'],
+            check_hash=json_data['check_hash'])
+
+        if received_data in self.data_table:
+            if data.need_to_save(self.node_table, self.node_id):
+                with open(received_data.save_path, 'rb') as file:
+                    pdf_data = file.read()
+                writer.write(pdf_data)
+            else:
+                node1, node2 = self.node_table.get_nodes_for_key(data.title)
+                request = b'REQUEST_DATA\n\n'
+                while True:
+                    try:
+                        r, w = await asyncio.open_connection(node1.ip, 8888)
+                        data0 = {
+                            "id": data.id,
+                            "save_hash": data.save_hash,
+                            "title": data.title,
+                            "path": data.path,
+                            "check_hash": data.check_hash,
+                            "file_size": data.file_size}
+                        json_data = json.dumps(data0).encode('utf-8')
+                        w.write(request)
+                        w.write(json_data)
+                        w.write(b'\n\n')  # 使用两个换行符作为分隔符
+                        await w.drain()
+                        pdf_data = await r.readexactly(data.file_size)
+                        writer.write(pdf_data)
+                        break
+
+                    except asyncio.TimeoutError:
+                        print("Timeout occurred when download_from_remote.")
+                        await asyncio.sleep(10)
+                        print("Retrying...")
+                    except OSError as e:
+                        print(f"Connection failed when download_from_remote. Error: {e}.")
+                        await asyncio.sleep(10)
+                        print("Retrying...")
+
+                    finally:
+                        if 'w' in locals():
+                            w.close()
+                            await w.wait_closed()
+
+    def handle_upload(self, reader, writer):
+        data = await reader.readuntil(b'\n\n')
+        json_data = json.loads(data.decode('utf-8'))
+        pdf_data = await reader.readexactly(json_data['file_size'])
+        received_data = Data(
+            id=json_data['id'],
+            save_hash=json_data['save_hash'],
+            title=json_data['title'],
+            path=json_data['path'],
+            check_hash=json_data['check_hash'])
+        if received_data not in self.data_table:
+            self.data_table.add_data(received_data)
+            nodes = self.node_table.get_nodes_for_key(received_data.title)
+            for node in nodes:
+                if node.id == self.node_id:
+                    os.makedirs(os.path.dirname(received_data.save_path), exist_ok=True)
+                    async with aiofiles.open(received_data.save_path, 'wb') as file:
+                        await file.write(pdf_data)
+                else:
+                    await data.send_data(node.ip, dest_port=8888)
+            await writer.write("SAVE_SUCCESS\n\n")
+        else:
+            await writer.write("SAVE_FAIL\n\n")
 
 
 async def download_from_remote(data: Data, dest_ip, dest_port, timeout=1000):
     request = b'DOWNLOAD\n\n'
-    try:
-        reader, writer = await asyncio.open_connection(dest_ip, dest_port)
-        data0 = {
-            "id": data.id,
-            "save_hash": data.save_hash,
-            "title": data.title,
-            "path": data.path,
-            "check_hash": data.check_hash,
-            "file_size": data.file_size}
-        json_data = json.dumps(data0).encode('utf-8')
-        writer.write(request)
-        writer.write(json_data)
-        writer.write(b'\n\n')  # 使用两个换行符作为分隔符
-        await writer.drain()
-        pdf_data = await reader.readexactly(data.file_size)
-        download_path = './download/' + data.title
-        os.makedirs(os.path.dirname(download_path), exist_ok=True)
-        async with aiofiles.open(download_path, 'wb') as file:
-            await file.write(pdf_data)
+    while True:
+        try:
+            reader, writer = await asyncio.open_connection(dest_ip, dest_port)
+            data0 = {
+                "id": data.id,
+                "save_hash": data.save_hash,
+                "title": data.title,
+                "path": data.path,
+                "check_hash": data.check_hash,
+                "file_size": data.file_size}
+            json_data = json.dumps(data0).encode('utf-8')
+            writer.write(request)
+            writer.write(json_data)
+            writer.write(b'\n\n')  # 使用两个换行符作为分隔符
+            await writer.drain()
+            pdf_data = await reader.readexactly(data.file_size)
+            download_path = './download/' + data.title
+            os.makedirs(os.path.dirname(download_path), exist_ok=True)
+            async with aiofiles.open(download_path, 'wb') as file:
+                await file.write(pdf_data)
 
-    except asyncio.TimeoutError:
-        print("Timeout occurred when download_from_remote.")
-    except OSError as e:
-        print(f"Connection failed when download_from_remote. Error: {e}.")
-        await asyncio.sleep(10)
-        print("Retrying...")
+        except asyncio.TimeoutError:
+            print("Timeout occurred when download_from_remote.")
+        except OSError as e:
+            print(f"Connection failed when download_from_remote. Error: {e}.")
+            await asyncio.sleep(10)
+            print("Retrying...")
 
-    finally:
-        if 'writer' in locals():
-            writer.close()
-            await writer.wait_closed()
+        finally:
+            if 'writer' in locals():
+                writer.close()
+                await writer.wait_closed()
 
 
 
