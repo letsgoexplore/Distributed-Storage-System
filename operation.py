@@ -5,6 +5,7 @@ import json
 import os
 import aiofiles
 import socket
+import sys
 
 from hash_ring import HashRing
 from network_layer import Node, NodeTable
@@ -71,7 +72,7 @@ class StorageServer:
 
     async def run_server(self):
         try:
-            server = await asyncio.start_server(self.handle_client, '127.0.0.1', self.port)
+            server = await asyncio.start_server(self.handle_client, self.ip, self.port)
             addr = server.sockets[0].getsockname()
             print(f'DataServer running on {addr}')
             async with server:
@@ -145,9 +146,9 @@ class StorageServer:
         writer.write(b'ACK\n\n')
 
     async def quit_network(self):
-        self.node_id + "/" + self.ip + "/" + self.port
+        data = self.node_id + "/" + self.ip + "/" + self.port
         request = b'QUIT\n\n'
-        # 向目标服务器发送请求
+        await self.send_message(ROOT_IP, ROOT_PORT, request, data)
 
     async def handle_quit_network(self, reader, writer):
         data = await reader.readuntil(b'\n\n')
@@ -410,50 +411,63 @@ class StorageServer:
         else:
             await writer.write("SAVE_FAIL\n\n")         
 
-async def download_from_remote(data: Data, dest_ip, dest_port, timeout=1000):
-    request = b'DOWNLOAD\n\n'
-    while True:
-        try:
-            reader, writer = await asyncio.open_connection(dest_ip, dest_port)
-            data0 = {
-                "id": data.id,
-                "save_hash": data.save_hash,
-                "title": data.title,
-                "path": data.path,
-                "check_hash": data.check_hash,
-                "file_size": data.file_size}
-            json_data = json.dumps(data0).encode('utf-8')
-            writer.write(request)
-            writer.write(json_data)
-            writer.write(b'\n\n')  # 使用两个换行符作为分隔符
-            await writer.drain()
-            pdf_data = await reader.readexactly(data.file_size)
-            download_path = './download/' + data.title
-            os.makedirs(os.path.dirname(download_path), exist_ok=True)
-            async with aiofiles.open(download_path, 'wb') as file:
-                await file.write(pdf_data)
+# async def download_from_remote(data: Data, dest_ip, dest_port, timeout=1000):
+#     request = b'DOWNLOAD\n\n'
+#     while True:
+#         try:
+#             reader, writer = await asyncio.open_connection(dest_ip, dest_port)
+#             data0 = {
+#                 "id": data.id,
+#                 "save_hash": data.save_hash,
+#                 "title": data.title,
+#                 "path": data.path,
+#                 "check_hash": data.check_hash,
+#                 "file_size": data.file_size}
+#             json_data = json.dumps(data0).encode('utf-8')
+#             writer.write(request)
+#             writer.write(json_data)
+#             writer.write(b'\n\n')  # 使用两个换行符作为分隔符
+#             await writer.drain()
+#             pdf_data = await reader.readexactly(data.file_size)
+#             download_path = './download/' + data.title
+#             os.makedirs(os.path.dirname(download_path), exist_ok=True)
+#             async with aiofiles.open(download_path, 'wb') as file:
+#                 await file.write(pdf_data)
 
-        except asyncio.TimeoutError:
-            print("Timeout occurred when download_from_remote.")
-        except OSError as e:
-            print(f"Connection failed when download_from_remote. Error: {e}.")
-            await asyncio.sleep(10)
-            print("Retrying...")
+#         except asyncio.TimeoutError:
+#             print("Timeout occurred when download_from_remote.")
+#         except OSError as e:
+#             print(f"Connection failed when download_from_remote. Error: {e}.")
+#             await asyncio.sleep(10)
+#             print("Retrying...")
 
-        finally:
-            if 'writer' in locals():
-                writer.close()
-                await writer.wait_closed()
+#         finally:
+#             if 'writer' in locals():
+#                 writer.close()
+#                 await writer.wait_closed()
 
 async def start_root_node():
-    my_server = StorageServer(DataTable(), "root", NodeTable(), ROOT_IP, ROOT_PORT)
-    StorageServer.start_network()
-    asyncio.run(my_server.run_server())
+    my_server = StorageServer(DataTable(), "root", NodeTable(), ROOT_IP, int(ROOT_PORT))
+    my_server.start_network()
+    await my_server.run_server()
 
 async def start_node(id, ip, port):
-    my_server = StorageServer(DataTable(), id, NodeTable(), ip, port)
-    await StorageServer.join_network()
-    asyncio.run(my_server.run_server())
+    my_server = StorageServer(DataTable(), id, NodeTable(), ip, int(port))
+    await my_server.join_network()
+    await my_server.run_server() 
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        command = sys.argv[1]
+        if command == "start_root_node":
+            asyncio.run(start_root_node())
+        elif command == "start_node" and len(sys.argv) == 5:
+            _, id, ip, port = sys.argv[1:]
+            asyncio.run(start_node(id, ip, port))
+        else:
+            print("Invalid arguments")
+    else:
+        print("No command provided")
 
 # async def start_service():
 #     # step 0: initiate
