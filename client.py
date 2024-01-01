@@ -193,8 +193,8 @@ async def main():
             await client.send_data(path)
             print("store finished!")
         if paras[0] == 'download':
-            id = paras[1]
-            data = client.data_table.datas[id]
+            id = int(paras[1])
+            data = client.data_table[id]
             await client.download_from_remote(data)
             print("download finished!")
         if paras[0] == 'data_table':

@@ -353,7 +353,7 @@ class StorageServer:
             file_size=json_data['file_size'])
 
         if received_data in self.data_table:
-            if data.need_to_save(self.node_table, self.node_id):
+            if received_data.need_to_save(self.node_table, self.node_id):
                 with open(received_data.save_path, 'rb') as file:
                     pdf_data = file.read()
                 writer.write(pdf_data)
@@ -413,7 +413,7 @@ class StorageServer:
                     async with aiofiles.open(received_data.save_path, 'wb') as file:
                         await file.write(pdf_data)
                 else:
-                    await data.send_data(node.ip, dest_port=ROOT_PORT)
+                    await received_data.send_data(node.ip, dest_port=ROOT_PORT)
 
             writer.write(b"SAVE_SUCCESS\n\n")
         else:

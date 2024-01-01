@@ -122,8 +122,13 @@ class HashRing(object):
         """根据key获取哈希环上顺时针方向的后两个节点"""
         hash_key_obj = Hash(key)  # 创建一个Hash对象而不是直接使用整数哈希值
         index = bisect.bisect_right(self.sorted_hashes, hash_key_obj) % len(self.sorted_hashes)
-        next_nodes = [self.sorted_hashes[(index + i) % len(self.sorted_hashes)] for i in range(2)]
-        return [self.nodes[node.hash] for node in next_nodes]
+        next_nodes_hash = [self.sorted_hashes[(index + i) % len(self.sorted_hashes)] for i in range(2)]
+        next_nodes = []
+        for node in self.nodes:
+            if Hash(node) in next_nodes_hash:
+                next_nodes.append(node)
+        return next_nodes
+
 
     def add_node_and_list_change(self, data_list, new_node):
         """计算添加新节点后哈希环上的变化"""
