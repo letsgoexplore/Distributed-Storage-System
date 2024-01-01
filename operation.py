@@ -12,7 +12,7 @@ from data_layer import Data, DataTable, StorageServer
 
 from Config import ROOT_IP, ROOT_PORT
 
-class RespondingServer:
+class StorageServer:
     def __init__(self, data_table: DataTable, node_id: str, node_table: NodeTable, ip: str='127.0.0.1', port: int=8888):
         self.node_id = node_id
         self.ip = ip
@@ -32,13 +32,16 @@ class RespondingServer:
                 if request == b'REQUEST_DATA_TABLE\n\n':
                     print("Client requested Data_Table")
                     await self.handle_request_data_table(reader, writer)
-
+        
                 elif request == b'REQUEST_DATA\n\n':
                     await self.handle_request_data(reader, writer)
 
                 # 收到数据
                 elif request == b'SEND_DATA\n\n':
                     await self.handle_store_data(reader, writer)
+
+                elif request == b'REQUEST_NODE_TABLE\n\n':
+                    await self.handle_request_node_table(reader, writer)
 
                 elif request == b'JOIN\n\n':
                     await self.handle_join_network(reader, writer)
@@ -150,7 +153,7 @@ class RespondingServer:
         data = data[:-2]
 
         ip = data
-        node_table = Node_Table(new_start=False)
+        node_table = NodeTable(new_start=False)
         node_table.remove_node(ip)
 
         # 如何初始化↓ TODO
@@ -166,7 +169,11 @@ class RespondingServer:
             try:
                 reader, writer = await asyncio.open_connection(dest_ip, dest_port)
                 writer.write(request)
+                await writer.drain()
 
+                data = await reader.readuntil(b'\n\n')
+                self.node_table.decode(data)
+                break
 
             except asyncio.TimeoutError:
                 print(f"Timeout occurred when connecting to {dest_ip} (quit).")
@@ -185,9 +192,10 @@ class RespondingServer:
         data = await reader.readuntil(b'\n\n')
         data = data[:-2]
 
-        self.node_table.decode(data)
-        writer.write()
-
+        encode_table = self.node_table.encode()
+        writer.write(encode_table)
+        writer.write(b'\n\n')
+        await writer.drain()
         
     # 只是个示例, 之后还要改，就是在store_data时，一定要先把他放到save_path中（默认: ./storage/）
     # async def store_data(id, title, path):
@@ -266,7 +274,6 @@ class RespondingServer:
                     writer.close()
                     await writer.wait_closed()
 
-    
     async def handle_request_data(self, writer, reader):
         """send back the requested file"""
         data = await reader.readuntil(b'\n\n')
@@ -314,7 +321,6 @@ class RespondingServer:
                 writer.close()
                 await writer.wait_closed()
 
-
     async def handle_request_data_table(self, reader, writer):
         """send back data table without exact file"""
         data_dict_list = [
@@ -332,7 +338,6 @@ class RespondingServer:
                 nodes = self.node_table.get_nodes_for_key(data.title)
                 await self.request_data(data, nodes[0].ip, nodes[0].port)
 
-    
     async def handle_download(self, reader, writer):
         data = await reader.readuntil(b'\n\n')
         json_data = json.loads(data.decode('utf-8'))
@@ -443,8 +448,8 @@ async def download_from_remote(data: Data, dest_ip, dest_port, timeout=1000):
                 writer.close()
                 await writer.wait_closed()
 
-
-
+my_server = StorageServer(DataTable(), "root", NodeTable(), ROOT_IP, ROOT_PORT)
+asyncio.run(my_server.run_server())
 
 # async def start_service():
 #     # step 0: initiate
@@ -465,5 +470,5 @@ async def download_from_remote(data: Data, dest_ip, dest_port, timeout=1000):
 #     await asyncio.gather(*tasks)
 
 
-if __name__ == "__main__":
-    asyncio.run(start_service())
+# if __name__ == "__main__":
+#     asyncio.run(start_service())

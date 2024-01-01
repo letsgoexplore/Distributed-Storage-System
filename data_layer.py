@@ -4,7 +4,7 @@ import asyncio
 import json
 import aiofiles
 from hash_ring import HashRing
-from network_layer import Node, Node_Table
+from network_layer import Node, NodeTable
 import socket
 from itertools import islice
 
