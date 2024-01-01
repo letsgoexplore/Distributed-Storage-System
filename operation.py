@@ -414,9 +414,9 @@ class StorageServer:
                         await file.write(pdf_data)
                 else:
                     await data.send_data(node.ip, dest_port=ROOT_PORT)
-            await writer.write("SAVE_SUCCESS\n\n")
+            await writer.write(b"SAVE_SUCCESS\n\n")
         else:
-            await writer.write("SAVE_FAIL\n\n")         
+            await writer.write(b"SAVE_FAIL\n\n")
 
 # async def download_from_remote(data: Data, dest_ip, dest_port, timeout=1000):
 #     request = b'DOWNLOAD\n\n'

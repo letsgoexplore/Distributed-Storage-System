@@ -139,7 +139,7 @@ class Client:
                     "file_size": data.file_size}
                 json_data = json.dumps(data).encode('utf-8')
                 # 2 read file
-                with open(data.save_path, 'rb') as file:
+                with open(data['path'], 'rb') as file:
                     real_data = file.read()
 
                 # 3 send data，收集ACK，没有收到的加入到queue中隔一段时间继续发送
@@ -149,9 +149,9 @@ class Client:
                 writer.write(real_data)
                 await writer.drain()
                 # Wait for ACK with a timeout
-                ack = await asyncio.wait_for(reader.readuntil(b'ACK\n'), timeout=timeout)
+                ack = await asyncio.wait_for(reader.readuntil(b'\n\n'), timeout=timeout)
 
-                if ack == b'ACK\n':
+                if ack == b'SAVE_SUCCESS\n\n':
                     # print("Data sent successfully")
                     break
 
