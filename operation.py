@@ -14,7 +14,7 @@ from data_layer import Data, DataTable
 from Config import ROOT_IP, ROOT_PORT
 
 class StorageServer:
-    def __init__(self, data_table: DataTable, node_id: str, node_table: NodeTable, ip: str='127.0.0.1', port: int=8888):
+    def __init__(self, data_table: DataTable, node_id: str, node_table: NodeTable, ip: str='127.0.0.1', port: int=ROOT_PORT):
         self.node_id = node_id
         self.ip = ip
         # self.ip = socket.gethostbyname(socket.gethostname())
@@ -116,7 +116,7 @@ class StorageServer:
     async def join_network(self):
 
         # step 1: ask root node for join request
-        data = self.node_id + "/" + self.ip + "/" + self.port
+        data = self.node_id + "/" + self.ip + "/" + str(self.port)
         join_request = b'JOIN\n\n'
         await self.send_message(ROOT_IP, ROOT_PORT, join_request, data)
 
@@ -146,7 +146,7 @@ class StorageServer:
         writer.write(b'ACK\n\n')
 
     async def quit_network(self):
-        data = self.node_id + "/" + self.ip + "/" + self.port
+        data = self.node_id + "/" + self.ip + "/" + str(self.port)
         request = b'QUIT\n\n'
         await self.send_message(ROOT_IP, ROOT_PORT, request, data)
 
@@ -239,7 +239,7 @@ class StorageServer:
         request = b'REQUEST_DATA\n\n'
         while True:
             try:
-                reader, writer = await asyncio.open_connection(ip, 8888)
+                reader, writer = await asyncio.open_connection(ip, ROOT_PORT)
                 data0 = {
                     "id": data.id,
                     "save_hash": data.save_hash,
@@ -356,7 +356,7 @@ class StorageServer:
                 request = b'REQUEST_DATA\n\n'
                 while True:
                     try:
-                        r, w = await asyncio.open_connection(node1.ip, 8888)
+                        r, w = await asyncio.open_connection(node1.ip, ROOT_PORT)
                         data0 = {
                             "id": data.id,
                             "save_hash": data.save_hash,
@@ -406,7 +406,7 @@ class StorageServer:
                     async with aiofiles.open(received_data.save_path, 'wb') as file:
                         await file.write(pdf_data)
                 else:
-                    await data.send_data(node.ip, dest_port=8888)
+                    await data.send_data(node.ip, dest_port=ROOT_PORT)
             await writer.write("SAVE_SUCCESS\n\n")
         else:
             await writer.write("SAVE_FAIL\n\n")         
@@ -472,7 +472,7 @@ if __name__ == "__main__":
 # async def start_service():
 #     # step 0: initiate
 #     setup()
-#     port_data_service = 8888
+#     port_data_service = ROOT_PORT
 #     data_table = DataTable()
 
 #     # 更多运行示例可见test_data_layer.py
