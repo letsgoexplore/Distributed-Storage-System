@@ -452,7 +452,7 @@ async def start_root_node():
 
 async def start_node(id, ip, port):
     my_server = StorageServer(DataTable(), id, NodeTable(), ip, port)
-    StorageServer.join_network()
+    await StorageServer.join_network()
     asyncio.run(my_server.run_server())
 
 # async def start_service():
