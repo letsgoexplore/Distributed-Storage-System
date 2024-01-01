@@ -26,49 +26,49 @@ class StorageServer:
         self.data_table = data_table
     
     async def handle_client(self, reader, writer):
-        while self.state:
-            try:
-                request = await reader.readuntil(b'\n\n')
-                # 收到获取datatable请求
-                if request == b'REQUEST_DATA_TABLE\n\n':
-                    print("Client requested Data_Table")
-                    await self.handle_request_data_table(reader, writer)
-        
-                elif request == b'REQUEST_DATA\n\n':
-                    await self.handle_request_data(reader, writer)
+    # while self.state:
+        try:
+            request = await reader.readuntil(b'\n\n')
+            # 收到获取datatable请求
+            if request == b'REQUEST_DATA_TABLE\n\n':
+                print("Client requested Data_Table")
+                await self.handle_request_data_table(reader, writer)
 
-                # 收到数据
-                elif request == b'SEND_DATA\n\n':
-                    await self.handle_store_data(reader, writer)
+            elif request == b'REQUEST_DATA\n\n':
+                await self.handle_request_data(reader, writer)
 
-                elif request == b'REQUEST_NODE_TABLE\n\n':
-                    await self.handle_request_node_table(reader, writer)
+            # 收到数据
+            elif request == b'SEND_DATA\n\n':
+                await self.handle_store_data(reader, writer)
 
-                elif request == b'JOIN\n\n':
-                    await self.handle_join_network(reader, writer)
+            elif request == b'REQUEST_NODE_TABLE\n\n':
+                await self.handle_request_node_table(reader, writer)
 
-                elif request == b'QUIT\n\n':
-                    await self.handle_quit_network(reader, writer)
+            elif request == b'JOIN\n\n':
+                await self.handle_join_network(reader, writer)
 
-                elif request == b'UPDATE_NET\n\n':
-                    await self.handle_update_network(reader, writer)
+            elif request == b'QUIT\n\n':
+                await self.handle_quit_network(reader, writer)
 
-                elif request == b'DOWNLOAD\n\n':
-                    await self.handle_download(reader, writer)
-                                    
-                elif request == b'UPLOAD\n\n':
-                    await self.handle_upload(reader, writer)
-                    
-                else:
-                    print("Unknown request from the client")
-                await writer.drain()
+            elif request == b'UPDATE_NET\n\n':
+                await self.handle_update_network(reader, writer)
 
-            except asyncio.CancelledError:
-                pass
-            except Exception as e:
-                print(f"Error during handle_client: {e}")
+            elif request == b'DOWNLOAD\n\n':
+                await self.handle_download(reader, writer)
 
-            writer.close()
+            elif request == b'UPLOAD\n\n':
+                await self.handle_upload(reader, writer)
+
+            else:
+                print("Unknown request from the client")
+            await writer.drain()
+
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            print(f"Error during handle_client: {e}")
+
+        writer.close()
 
     async def run_server(self):
         try:
@@ -134,6 +134,7 @@ class StorageServer:
     async def handle_join_network(self, reader, writer):
         
         data = await reader.readuntil(b'\n\n')
+        data = data.decode('utf-8')
         data = data[:-2]
 
         data = data.split("/")
@@ -152,6 +153,7 @@ class StorageServer:
 
     async def handle_quit_network(self, reader, writer):
         data = await reader.readuntil(b'\n\n')
+        data = data.decode('utf-8')
         data = data[:-2]
 
         ip = data
@@ -222,8 +224,9 @@ class StorageServer:
             save_hash=json_data['save_hash'],
             title=json_data['title'],
             path=json_data['path'],
-            check_hash=json_data['check_hash'])
-        if received_data.need_to_save(self.ring, self.node_id):
+            check_hash=json_data['check_hash'],
+            file_size=json_data['file_size'])
+        if received_data.need_to_save(self.node_table, self.node_id):
             os.makedirs(os.path.dirname(received_data.save_path), exist_ok=True)
             async with aiofiles.open(received_data.save_path, 'wb') as file:
                 await file.write(pdf_data)
@@ -281,7 +284,8 @@ class StorageServer:
             save_hash=json_data['save_hash'],
             title=json_data['title'],
             path=json_data['path'],
-            check_hash=json_data['check_hash'])
+            check_hash=json_data['check_hash'],
+            file_size=json_data['file_size'])
 
         # 认为向你发起download的请求，则已知你拥有这个文件，还是判断一下，但应该没问题（如果达成前面的共识的话）
         if received_data in self.data_table:
@@ -305,7 +309,8 @@ class StorageServer:
                 # 将数据字典转换回Data对象
                 self.data_table.datas = [
                     Data(id=data_dict['id'], save_hash=data_dict['save_hash'], title=data_dict['title'],
-                         path=data_dict['path'], check_hash=data_dict['check_hash'])
+                         path=data_dict['path'], check_hash=data_dict['check_hash'],
+                         file_size=data_dict['file_size'])
                     for data_dict in data_dict_list
                 ]
                 break
@@ -344,7 +349,8 @@ class StorageServer:
             save_hash=json_data['save_hash'],
             title=json_data['title'],
             path=json_data['path'],
-            check_hash=json_data['check_hash'])
+            check_hash=json_data['check_hash'],
+            file_size=json_data['file_size'])
 
         if received_data in self.data_table:
             if data.need_to_save(self.node_table, self.node_id):
@@ -392,11 +398,12 @@ class StorageServer:
         json_data = json.loads(data.decode('utf-8'))
         pdf_data = await reader.readexactly(json_data['file_size'])
         received_data = Data(
-            id=json_data['id'],
+            id=len(self.data_table.datas),
             save_hash=json_data['save_hash'],
             title=json_data['title'],
             path=json_data['path'],
-            check_hash=json_data['check_hash'])
+            check_hash=json_data['check_hash'],
+            file_size=json_data['file_size'])
         if received_data not in self.data_table:
             self.data_table.add_data(received_data)
             nodes = self.node_table.get_nodes_for_key(received_data.title)
@@ -457,17 +464,18 @@ async def start_node(id, ip, port):
     await my_server.run_server() 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        command = sys.argv[1]
-        if command == "start_root_node":
-            asyncio.run(start_root_node())
-        elif command == "start_node" and len(sys.argv) == 5:
-            _, id, ip, port = sys.argv[1:]
-            asyncio.run(start_node(id, ip, port))
-        else:
-            print("Invalid arguments")
-    else:
-        print("No command provided")
+    asyncio.run(start_root_node())
+    # if len(sys.argv) > 1:
+    #     command = sys.argv[1]
+    #     if command == "start_root_node":
+    #         asyncio.run(start_root_node())
+    #     elif command == "start_node" and len(sys.argv) == 5:
+    #         _, id, ip, port = sys.argv[1:]
+    #         asyncio.run(start_node(id, ip, port))
+    #     else:
+    #         print("Invalid arguments")
+    # else:
+    #     print("No command provided")
 
 # async def start_service():
 #     # step 0: initiate

@@ -10,17 +10,18 @@ from itertools import islice
 
 
 class Data:
-    def __init__(self, id, save_hash, title, path, check_hash=0):
+    def __init__(self, id, save_hash, title, path, check_hash=0, file_size=None):
         self.id = id
         self.save_hash = save_hash
         self.title = title
         self.path = path
         self.check_hash = check_hash
         self.save_path = "./storage/" + self.title
-        try:
-            self.file_size = os.path.getsize(self.path)
-        except FileNotFoundError:
-            print(f"File '{self.path}' not found.")
+        if file_size is None:
+            try:
+                self.file_size = os.path.getsize(self.path)
+            except FileNotFoundError:
+                print(f"File '{self.path}' not found.")
 
     # !!!!!
     def __eq__(self, other:Data):
