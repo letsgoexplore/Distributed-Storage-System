@@ -33,7 +33,7 @@
 
 import math
 import sys
-from bisect import bisect
+import bisect
 import hashlib
 import copy
 
@@ -59,6 +59,17 @@ class Hash:
         b_key = self._hash_digest(key)
         return self._hash_val(b_key, lambda x: x)
 
+    def to_dict(self):
+        """将 Hash 对象转换为可以序列化的字典"""
+        return {
+            'id': self.id,
+            'hash': self.hash
+        }
+    
+    def from_dict(data):
+        """从字典转换回 Hash 对象"""
+        return Hash(data['id'])
+    
     def _hash_val(self, b_key, entry_fn):
         """Generates a hash value from a byte key."""
         return ((b_key[entry_fn(3)] << 24)
