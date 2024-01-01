@@ -96,7 +96,7 @@ class Hash:
 class HashRing(object):
     def __init__(self):
         self.sorted_hashes = []
-        self.nodes = {}
+        self.nodes = []
     
     def clone(self):
         """clone function"""
