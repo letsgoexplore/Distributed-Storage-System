@@ -81,7 +81,7 @@ class RespondingServer:
         # 构建初始化节点表，节点表被保存在json文件
         self.node_table.add_node(self.node)
 
-    async def send_message(dest_ip, dest_port, request, data):
+    async def send_message(self, dest_ip, dest_port, request, data, timeout=10):
         while True:
             try:
                 reader, writer = await asyncio.open_connection(dest_ip, dest_port)
@@ -89,7 +89,7 @@ class RespondingServer:
                 writer.write(data.encode('utf-8'))
                 writer.write(b'\n\n')  # Using two newline characters as a separator
 
-                response = await asyncio.wait_for(reader.readuntil(b'\n\n'), 1.0)
+                response = await asyncio.wait_for(reader.readuntil(b'\n\n'), timeout)
                 if response == b'ACK':
                     print(f"Received ACK from {dest_ip}")
                     break
@@ -106,15 +106,21 @@ class RespondingServer:
                     await writer.wait_closed()
 
     async def join_network(self):
+
+        # step 1: ask root node for join request
         data = self.node_id + "/" + self.ip + "/" + self.port
-        request = b'JOIN\n\n'
+        join_request = b'JOIN\n\n'
+        await self.send_message(ROOT_IP, ROOT_PORT, join_request, data)
 
-        # step 1: ask root node
-        await self.send_message(ROOT_IP, ROOT_PORT, request, data)
+        # step 2: request node table from root node
+        await self.request_node_table(ROOT_IP, ROOT_PORT)
 
-
-        tasks = [self.send_message(node.ip, node.port, request, data) for node in self.node_table.nodes if node.ip != self.ip]
+        # step 3: broadcast to all for join request
+        tasks = [self.send_message(node.ip, node.port, join_request, data) for node in self.node_table.nodes if node.ip != self.ip and node.ip != ROOT_IP]
         await asyncio.gather(*tasks)
+
+        # setp 4: update all data
+        await self.request_personal_data_from_table()
 
     async def handle_join_network(self, reader, writer):
         
@@ -122,61 +128,13 @@ class RespondingServer:
         data = data[:-2]
 
         data = data.split("/")
-        ip = data[0]
-        parent_ip = data[1]
+        node_id = data[0]
+        ip = data[1]
+        port = data[2]
+        node = Node(node_id, ip, port)
+        self.node_table.add_node_and_list_change(self.data_table,node)
 
-        node = Node(ip=ip, parent_ip=parent_ip)
-        node_table = Node_Table(new_start=False)
-        node_table.add_node(node)
-
-        # 获取本机ip地址
-        # ip = "192.168.52.1"
-        self_ip = socket.gethostbyname(socket.gethostname())
-
-        # 并且如果自己是父节点，向请求添加的节点发送节点链表
-        if self_ip == parent_ip:
-            json_dir = {}
-            json_dir["IPs_nodes"] = node_table.nodes
-            json_dir["IPs_next_nodes"] = node_table.next_nodes
-            json_dir["IPs_pre_nodes"] = node_table.pre_nodes
-            json_data = json.dumps(json_dir)
-            request = b"UPDATE_NET\n\n"
-            # send message，将该json_str(字符串)发送给请求加入的节点，让他更新node table
-
-            writer.write(request)
-            writer.write(json_data.encode('utf-8'))
-            writer.write(b'\n\n')  # Using two newline characters as a separator
-
-        # new_ring = HashRing(node_table)
-        changes = self.ring.add_node_and_list_change(self.data_table, node.id)
-        for change in changes:
-            item, nodes_before, nodes_after = change
-            if self.node_id in nodes_before:
-                if self.node_id not in nodes_after:
-                    try:
-                        os.remove(item.save_path)
-                    except OSError as e:
-                        print(f"Error deleting file '{data.save_path}': {e}")
-            else:
-                if self.node_id in nodes_after:
-                    # 理论上，原来存储的第一个节点一定不会删除数据
-                    await self.request_data(data, nodes_before[0].ip)
-        # for data in self.data_table:
-        #     node1, node2 = self.ring.ring_map_node(data.title)
-        #     node11, node22 = new_ring.ring_map_node(data.title)
-        #     # 原来存的，现在不需要存的，删除
-        #     if self.node_id == node1 or self.node_id == node2:
-        #         if not (self.node_id == node11 or self.node_id == node22):
-        #             try:
-        #                 os.remove(data.save_path)
-        #             except OSError as e:
-        #                 print(f"Error deleting file '{data.save_path}': {e}")
-        #     # 原来没存现在需要存的
-        #     else:
-        #         if self.node_id == node11 or self.node_id == node22:
-        #             # 理论上，原来存储的第一个节点一定不会删除数据
-        #             await self.request_data(data, node1.ip)
-        # self.ring = new_ring
+        writer.write(b'ACK\n\n')
 
     async def quit_network(self):
         self.node_id + "/" + self.ip + "/" + self.port
@@ -236,12 +194,36 @@ class RespondingServer:
         # new_ring = HashRing(node_table)
         # self.ring = new_ring
 
-    async def request_node_table(self):
-        pass
+    async def request_node_table(self, dest_ip, dest_port):
+        request = b'REQUEST_NODE_TABLE\n\n'
+
+        while True:
+            try:
+                reader, writer = await asyncio.open_connection(dest_ip, dest_port)
+                writer.write(request)
+
+
+            except asyncio.TimeoutError:
+                print(f"Timeout occurred when connecting to {dest_ip} (quit).")
+            except OSError as e:
+                print(f"Connection failed when connecting to {dest_ip} (quit). Error: {e}.")
+                await asyncio.sleep(10)
+                print("Retrying...")
+            finally:
+                if 'writer' in locals():
+                    writer.close()
+                    await writer.wait_closed()
+
     
     # TODO
-    async def handle_request_node_table():
-        pass
+    async def handle_request_node_table(self, reader, writer):
+        data = await reader.readuntil(b'\n\n')
+        data = data[:-2]
+
+        self.node_table.decode(data)
+        writer.write()
+
+        
     # 只是个示例, 之后还要改，就是在store_data时，一定要先把他放到save_path中（默认: ./storage/）
     async def store_data(id, title, path):
         data = Data(id=id, save_hash=0, title=title, path=path)
@@ -348,7 +330,11 @@ class RespondingServer:
         writer.write(json_data.encode('utf-8'))
         writer.write(b'\n\n')  # Using two newline characters as a separator
 
-    
+    async def request_personal_data_from_table(self):
+        for data in self.data_table:
+            if data.need_to_save(self.node_table, self.node_id):
+                nodes = self.node_table.get_nodes_for_key(data.title)
+                await self.request_data(data, nodes[0].ip, nodes[0].port)
 
     
 
@@ -389,8 +375,9 @@ class RespondingServer:
         # self.ring = new_ring
 
     # 对应operation中的decode_message()
-    
 
+
+            
 
 async def download_from_remote(data: Data, dest_ip, dest_port, timeout=1000):
     request = b'DOWNLOAD\n\n'
