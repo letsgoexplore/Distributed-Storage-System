@@ -74,7 +74,7 @@ class Client:
         data_dict_list = [
             {'id': data.id, 'save_hash': data.save_hash, 'title': data.title, 'path': data.path,
              'check_hash': data.check_hash, 'file_size': data.file_size}
-            for data in self.data_table.datas
+            for data in self.data_table
         ]
         print(data_dict_list)
 
