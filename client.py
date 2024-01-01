@@ -130,16 +130,16 @@ class Client:
                 reader, writer = await asyncio.open_connection(self.server_ip, self.server_port)
 
                 # 1 Prepare non-binary data/准备非二进制数据
-                data = {
+                send_data = {
                     "id": 0,
                     "save_hash": 0,
                     "title": data.title,
                     "path": data.path,
                     "check_hash": data.check_hash,
                     "file_size": data.file_size}
-                json_data = json.dumps(data).encode('utf-8')
+                json_data = json.dumps(send_data).encode('utf-8')
                 # 2 read file
-                with open(data['path'], 'rb') as file:
+                with open(send_data['path'], 'rb') as file:
                     real_data = file.read()
 
                 # 3 send data，收集ACK，没有收到的加入到queue中隔一段时间继续发送

@@ -22,6 +22,8 @@ class Data:
                 self.file_size = os.path.getsize(self.path)
             except FileNotFoundError:
                 print(f"File '{self.path}' not found.")
+        else:
+            self.file_size = file_size
 
     # !!!!!
     def __eq__(self, other:Data):
