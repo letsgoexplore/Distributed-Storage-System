@@ -176,7 +176,7 @@ class Client:
         return data
 
 async def main():
-    client = Client("127.0.0.1", ROOT_PORT)
+    client = Client('192.168.1.101', ROOT_PORT)
 
     await client.request_node_table()
     client.print_node_table()
