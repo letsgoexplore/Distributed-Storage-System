@@ -414,9 +414,10 @@ class StorageServer:
                         await file.write(pdf_data)
                 else:
                     await data.send_data(node.ip, dest_port=ROOT_PORT)
-            await writer.write(b"SAVE_SUCCESS\n\n")
+
+            writer.write(b"SAVE_SUCCESS\n\n")
         else:
-            await writer.write(b"SAVE_FAIL\n\n")
+            writer.write(b"SAVE_FAIL\n\n")
 
 # async def download_from_remote(data: Data, dest_ip, dest_port, timeout=1000):
 #     request = b'DOWNLOAD\n\n'
@@ -464,18 +465,17 @@ async def start_node(id, ip, port):
     await my_server.run_server() 
 
 if __name__ == "__main__":
-    asyncio.run(start_root_node())
-    # if len(sys.argv) > 1:
-    #     command = sys.argv[1]
-    #     if command == "start_root_node":
-    #         asyncio.run(start_root_node())
-    #     elif command == "start_node" and len(sys.argv) == 5:
-    #         _, id, ip, port = sys.argv[1:]
-    #         asyncio.run(start_node(id, ip, port))
-    #     else:
-    #         print("Invalid arguments")
-    # else:
-    #     print("No command provided")
+    if len(sys.argv) > 1:
+        command = sys.argv[1]
+        if command == "start_root_node":
+            asyncio.run(start_root_node())
+        elif command == "start_node" and len(sys.argv) == 5:
+            _, id, ip, port = sys.argv[1:]
+            asyncio.run(start_node(id, ip, port))
+        else:
+            print("Invalid arguments")
+    else:
+        print("No command provided")
 
 # async def start_service():
 #     # step 0: initiate
