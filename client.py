@@ -124,7 +124,7 @@ class Client:
 
             """
         data = self.get_local_data(path)
-        request = b'SEND_DATA\n\n'
+        request = b'UPLOAD\n\n'
         while True:
             try:
                 reader, writer = await asyncio.open_connection(self.server_ip, self.server_port)
