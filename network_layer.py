@@ -31,7 +31,7 @@ class NodeTable(HashRing):
         """turning NodeTable into utf-8"""
         data = {
             "sorted_hashes": [h.to_dict() for h in self.sorted_hashes],
-            "nodes": [self.nodes[n].to_dict() for n in self.nodes]
+            "nodes": [n.to_dict() for n in self.nodes]
         }
         return json.dumps(data).encode('utf-8')
     
