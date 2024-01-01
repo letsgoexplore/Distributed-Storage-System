@@ -16,12 +16,12 @@ class Node:
         return {
             'id': self.id,
             'ip': self.ip,
-            'port': self.port
+            'port': str(self.port)
         }
 
     def from_dict(data):
         """从字典转换回 Node 对象"""
-        return Node(data['id'], data['ip'], data['port'])
+        return Node(data['id'], data['ip'], int(data['port']))
 
 class NodeTable(HashRing):
     def __init__(self):
