@@ -62,11 +62,9 @@ class Data:
                 writer.write(pdf_data)
                 await writer.drain()
                 # Wait for ACK with a timeout
-                ack = await asyncio.wait_for(reader.readuntil(b'ACK\n'), timeout=timeout)
+                ack = await asyncio.wait_for(reader.readuntil(b'ACK\n\n'), timeout=timeout)
 
-                if ack == b'ACK\n':
-                    # print("Data sent successfully")
-                    break
+                break
 
             except asyncio.TimeoutError:
                 print("Timeout occurred when sending data. Retry in 10 seconds")
@@ -192,7 +190,7 @@ class StorageServer:
         if received_data not in self.data_table:
             self.data_table.add_data(received_data)
 
-        writer.write(b'ACK\n')
+        writer.write(b'ACK\n\n')
 
     async def handle_download(self, reader, writer):
         data = await reader.readuntil(b'\n\n')
