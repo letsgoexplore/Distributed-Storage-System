@@ -20,7 +20,10 @@
 ### Store File
 - First start the client
   - `python client.py`
-  - add node
+  - check node_state: `node_table`
+  - check data_state: `data_table`
+  - store data: `store FILE_PATH`
+  - download data: first `data_table` to know it's sequence, then `download SEQUENCE`
 
 ### Read File
 
