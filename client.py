@@ -16,9 +16,24 @@ class Client:
         self.data_table = DataTable()
         self.cur_id = len(self.data_table.datas)
 
-    def change_server(self, server_ip, server_port):
-        self.server_ip = server_ip
-        self.server_port = server_port
+    async def change_server(self, server_ip, server_port):
+        """switch the server"""
+        # try to fetch node table, to test whether it's connectable
+        try:
+            reader, writer = await asyncio.open_connection(server_ip, server_port)
+            writer.write(b'REQUEST_NODE_TABLE\n\n')
+            await writer.drain()
+
+            node_json = await reader.readuntil(b'\n\n')
+            self.node_table.decode(node_json)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            print(f"Sorry, your input new server cannot be connected, please check the new ip and port!")
+        else:
+            self.server_ip = server_ip
+            self.server_port = server_port
+            print(f"Successfully switched to new server!")
 
     async def request_node_table(self):
         reader, writer = await asyncio.open_connection(self.server_ip, self.server_port)
@@ -203,6 +218,8 @@ async def main():
         if paras[0] == 'node_table':
             await client.request_node_table()
             client.print_node_table()
+        if paras[0] == 'change_server':
+            await client.change_server(paras[1], paras[2])
         if paras[0] == 'quit':
             quit = input('press [y] to quit')
             if quit == 'y':
