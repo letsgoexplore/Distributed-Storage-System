@@ -22,6 +22,7 @@ class StorageServer:
         self.node = Node(id=self.node_id, ip=self.ip, port=self.port)
         self.state = True
 
+
         self.node_table = node_table
         self.data_table = data_table
     
@@ -132,6 +133,8 @@ class StorageServer:
         await self.request_personal_data_from_table()
 
     async def handle_join_network(self, reader, writer):
+
+
         
         data = await reader.readuntil(b'\n\n')
         data = data.decode('utf-8')
@@ -141,6 +144,13 @@ class StorageServer:
         node_id = data[0]
         ip = data[1]
         port = data[2]
+
+        #检查是否已加入
+        check = self.node_table.get_nodes_for_key(node_id)
+        if len(check) == 0:
+            print("node has joined!")
+            return
+
         node = Node(node_id, ip, port)
         self.node_table.add_node_and_list_change(self.data_table,node)
 
@@ -156,10 +166,19 @@ class StorageServer:
         data = data.decode('utf-8')
         data = data[:-2]
 
-        ip = data
-        node_table = NodeTable(new_start=False)
-        node_table.remove_node(ip)
+        id = data[0]
+        ip = data[1]
+        port = data[2]
+        next_ips = self.node_table.get_nodes_for_key(id)
 
+        if self.ip == next_ips[0]:
+            for data in self.data_table.datas:
+                if ip in self.node_table.get_nodes_for_key(data["id"]):
+                    await self.request_data(data, ip)
+
+
+
+        self.node_table.remove_node(ip)
         # 如何初始化↓ TODO
         node = Node(ip)
         self.ring.remove_node(node.id)
@@ -293,7 +312,7 @@ class StorageServer:
                 pdf_data = file.read()
             writer.write(pdf_data)
 
-    # TODO
+
     async def request_data_table(self, dest_ip, dest_port):
         while True:
             try:
@@ -323,6 +342,10 @@ class StorageServer:
             finally:
                 writer.close()
                 await writer.wait_closed()
+
+
+
+
 
     async def handle_request_data_table(self, reader, writer):
         """send back data table without exact file"""
