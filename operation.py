@@ -147,7 +147,8 @@ class StorageServer:
         #     return
         for node in self.node_table.nodes:
             if node_id == node.id:
-                writer.write(b'ALREADY\n\n')
+                writer.write(b'ACK\n\n')
+                return
         node = Node(node_id, ip, port)
         self.node_table.add_node_and_list_change(self.data_table,node)
 
