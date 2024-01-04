@@ -27,6 +27,7 @@ class StorageServer:
         self.data_table = data_table
     
     async def handle_client(self, reader, writer):
+        """deal with incoming request; according to the msg header, call different functions"""
     # while self.state:
         try:
             request = await reader.readuntil(b'\n\n')
@@ -69,6 +70,7 @@ class StorageServer:
         writer.close()
 
     async def run_server(self):
+        """start entire server"""
         try:
             server = await asyncio.start_server(self.handle_client, self.ip, self.port)
             addr = server.sockets[0].getsockname()
@@ -79,15 +81,13 @@ class StorageServer:
         except Exception as e:
             print(f"Error during run DataServer: {e}")
     
-    # def setup():
-    #     # 从json文件加载节点表
-    #     Node_Table(initial_nodes=None, new_start=False)
-    
     def start_network(self):
+        """the first node(root node) start network"""
         # 构建初始化节点表，节点表被保存在json文件
         self.node_table.add_node(self.node)
 
     async def send_message(self, dest_ip, dest_port, request, data, timeout=10):
+        """general msg sending function(only message, not file)"""
         while True:
             try:
                 reader, writer = await asyncio.open_connection(dest_ip, dest_port)
@@ -112,7 +112,7 @@ class StorageServer:
                     await writer.wait_closed()
 
     async def join_network(self):
-
+        """call when a normal node intend to join the network"""
         # step 1: ask root node for join request
         data = self.node_id + "/" + self.ip + "/" + str(self.port)
         join_request = b'JOIN\n\n'
@@ -204,29 +204,11 @@ class StorageServer:
                     writer.close()
                     await writer.wait_closed()
 
-    # TODO
     async def handle_request_node_table(self, reader, writer):
         encode_table = self.node_table.encode()
         writer.write(encode_table)
         writer.write(b'\n\n')
         await writer.drain()
-        
-    # 只是个示例, 之后还要改，就是在store_data时，一定要先把他放到save_path中（默认: ./storage/）
-    # async def store_data(id, title, path):
-    #     data = Data(id=id, save_hash=0, title=title, path=path)
-    #     save_path = data.save_path
-    #     try:
-    #         shutil.copy(path, save_path)
-
-    #     except FileNotFoundError:
-    #         print(f"Error: File {path} not found")
-    #     except PermissionError:
-    #         print(f"Error: Unable to copy file to {save_path}, permission denied")
-    #     except Exception as e:
-    #         print(f"An unknown error occurred: {e}")
-
-    #     # 再执行后续操作
-    #     pass
     
     async def handle_store_data(self, reader, writer):
         """when new data comes, this function is used"""
@@ -248,9 +230,6 @@ class StorageServer:
             self.data_table.add_data(received_data)
 
         writer.write(b'ACK\n\n')
-
-    # async def read_data():
-    #     pass
 
     async def request_data(self, data:Data, ip):
         request = b'REQUEST_DATA\n\n'
@@ -307,7 +286,6 @@ class StorageServer:
                 pdf_data = file.read()
             writer.write(pdf_data)
 
-
     async def request_data_table(self, dest_ip, dest_port):
         while True:
             try:
@@ -355,6 +333,7 @@ class StorageServer:
                 nodes = self.node_table.get_nodes_for_key(data.title)
                 await self.request_data(data, nodes[0].ip, nodes[0].port)
 
+    # Interaction with client
     async def handle_download(self, reader, writer):
         data = await reader.readuntil(b'\n\n')
         json_data = json.loads(data.decode('utf-8'))
@@ -376,7 +355,7 @@ class StorageServer:
                 request = b'REQUEST_DATA\n\n'
                 while True:
                     try:
-                        r, w = await asyncio.open_connection(node1.ip, ROOT_PORT)
+                        r, w = await asyncio.open_connection(node1.ip, node1.port)
                         data0 = {
                             "id": data.id,
                             "save_hash": data.save_hash,
@@ -408,7 +387,7 @@ class StorageServer:
                             await w.wait_closed()
                     
                     try:
-                        r, w = await asyncio.open_connection(node2.ip, ROOT_PORT)
+                        r, w = await asyncio.open_connection(node2.ip, node2.port)
                         data0 = {
                             "id": data.id,
                             "save_hash": data.save_hash,
@@ -458,7 +437,7 @@ class StorageServer:
         if received_data not in self.data_table:
             self.data_table.add_data(received_data)
             nodes = self.node_table.get_nodes_for_key(received_data.title)
-            for node in self.node_table:
+            for node in self.node_table.nodes:
                 if node in nodes:
                     flag = 1
                 else:
@@ -467,41 +446,6 @@ class StorageServer:
                 os.remove(os.path.dirname(received_data.save_path))
         else:
             writer.write(b"SAVE_FAIL\n\n")
-
-# async def download_from_remote(data: Data, dest_ip, dest_port, timeout=1000):
-#     request = b'DOWNLOAD\n\n'
-#     while True:
-#         try:
-#             reader, writer = await asyncio.open_connection(dest_ip, dest_port)
-#             data0 = {
-#                 "id": data.id,
-#                 "save_hash": data.save_hash,
-#                 "title": data.title,
-#                 "path": data.path,
-#                 "check_hash": data.check_hash,
-#                 "file_size": data.file_size}
-#             json_data = json.dumps(data0).encode('utf-8')
-#             writer.write(request)
-#             writer.write(json_data)
-#             writer.write(b'\n\n')  # 使用两个换行符作为分隔符
-#             await writer.drain()
-#             pdf_data = await reader.readexactly(data.file_size)
-#             download_path = './download/' + data.title
-#             os.makedirs(os.path.dirname(download_path), exist_ok=True)
-#             async with aiofiles.open(download_path, 'wb') as file:
-#                 await file.write(pdf_data)
-
-#         except asyncio.TimeoutError:
-#             print("Timeout occurred when download_from_remote.")
-#         except OSError as e:
-#             print(f"Connection failed when download_from_remote. Error: {e}.")
-#             await asyncio.sleep(10)
-#             print("Retrying...")
-
-#         finally:
-#             if 'writer' in locals():
-#                 writer.close()
-#                 await writer.wait_closed()
 
 async def start_root_node():
     my_server = StorageServer(DataTable(), "root", NodeTable(), ROOT_IP, int(ROOT_PORT))
@@ -525,25 +469,3 @@ if __name__ == "__main__":
             print("Invalid arguments")
     else:
         print("No command provided")
-
-# async def start_service():
-#     # step 0: initiate
-#     setup()
-#     port_data_service = ROOT_PORT
-#     data_table = DataTable()
-
-#     # 更多运行示例可见test_data_layer.py
-#     storage_server = StorageServer(data_table=data_table, node_id='node1', ring=HashRing(), ip='127.0.0.1',
-#                                 port=port_data_service)
-
-#     # Create tasks for running servers, 这里还可以添加其他异步任务，如将来要执行的命令行（感觉可以）
-#     tasks = [
-#         asyncio.create_task(storage_server.run())
-#     ]
-
-#     # Run all tasks concurrently
-#     await asyncio.gather(*tasks)
-
-
-# if __name__ == "__main__":
-#     asyncio.run(start_service())

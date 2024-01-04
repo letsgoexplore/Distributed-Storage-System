@@ -208,6 +208,7 @@ async def main():
             await client.send_data(path)
             print("store finished!")
         if paras[0] == 'download':
+            await client.request_data_table()
             id = int(paras[1])
             data = client.data_table[id]
             await client.download_from_remote(data)
