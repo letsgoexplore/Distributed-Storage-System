@@ -51,9 +51,6 @@ class StorageServer:
             elif request == b'QUIT\n\n':
                 await self.handle_quit_network(reader, writer)
 
-            elif request == b'UPDATE_NET\n\n':
-                await self.handle_update_network(reader, writer)
-
             elif request == b'DOWNLOAD\n\n':
                 await self.handle_download(reader, writer)
 
@@ -175,8 +172,6 @@ class StorageServer:
             for data in self.data_table.datas:
                 if ip in self.node_table.get_nodes_for_key(data["id"]):
                     await self.request_data(data, ip)
-
-
 
         self.node_table.remove_node(ip)
         # 如何初始化↓ TODO
@@ -343,10 +338,6 @@ class StorageServer:
                 writer.close()
                 await writer.wait_closed()
 
-
-
-
-
     async def handle_request_data_table(self, reader, writer):
         """send back data table without exact file"""
         data_dict_list = [
@@ -415,6 +406,38 @@ class StorageServer:
                         if 'w' in locals():
                             w.close()
                             await w.wait_closed()
+                    
+                    try:
+                        r, w = await asyncio.open_connection(node2.ip, ROOT_PORT)
+                        data0 = {
+                            "id": data.id,
+                            "save_hash": data.save_hash,
+                            "title": data.title,
+                            "path": data.path,
+                            "check_hash": data.check_hash,
+                            "file_size": data.file_size}
+                        json_data = json.dumps(data0).encode('utf-8')
+                        w.write(request)
+                        w.write(json_data)
+                        w.write(b'\n\n')  # 使用两个换行符作为分隔符
+                        await w.drain()
+                        pdf_data = await r.readexactly(data.file_size)
+                        writer.write(pdf_data)
+                        break
+
+                    except asyncio.TimeoutError:
+                        print("Timeout occurred when download_from_remote.")
+                        await asyncio.sleep(10)
+                        print("Retrying...")
+                    except OSError as e:
+                        print(f"Connection failed when download_from_remote. Error: {e}.")
+                        await asyncio.sleep(10)
+                        print("Retrying...")
+
+                    finally:
+                        if 'w' in locals():
+                            w.close()
+                            await w.wait_closed()
 
     async def handle_upload(self, reader, writer):
         data = await reader.readuntil(b'\n\n')
@@ -427,18 +450,21 @@ class StorageServer:
             path=json_data['path'],
             check_hash=json_data['check_hash'],
             file_size=json_data['file_size'])
+        flag = 0
+        os.makedirs(os.path.dirname(received_data.save_path), exist_ok=True)
+        async with aiofiles.open(received_data.save_path, 'wb') as file:
+            await file.write(pdf_data)
+        writer.write(b"SAVE_SUCCESS\n\n")
         if received_data not in self.data_table:
             self.data_table.add_data(received_data)
             nodes = self.node_table.get_nodes_for_key(received_data.title)
-            for node in nodes:
-                if node.id == self.node_id:
-                    os.makedirs(os.path.dirname(received_data.save_path), exist_ok=True)
-                    async with aiofiles.open(received_data.save_path, 'wb') as file:
-                        await file.write(pdf_data)
+            for node in self.node_table:
+                if node in nodes:
+                    flag = 1
                 else:
                     await received_data.send_data(node.ip, dest_port=ROOT_PORT)
-
-            writer.write(b"SAVE_SUCCESS\n\n")
+            if flag == 0:
+                os.remove(os.path.dirname(received_data.save_path))
         else:
             writer.write(b"SAVE_FAIL\n\n")
 
