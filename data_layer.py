@@ -31,7 +31,7 @@ class Data:
             return self.title == other.title
         return False
 
-    async def send_data(self, dest_ip, dest_port=8888, request=b'SEND_DATA\n\n', timeout=100):
+    async def send_data(self, dest_ip, dest_port=8888, request=b'SEND_DATA\n\n', timeout=1000):
         """
             用于将本Data对象发送至指定节点
             :param request: 发送该数据包的请求：SEND_DATA or REPLY_DOWNLOAD

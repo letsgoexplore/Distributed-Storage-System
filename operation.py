@@ -131,8 +131,6 @@ class StorageServer:
 
     async def handle_join_network(self, reader, writer):
 
-
-        
         data = await reader.readuntil(b'\n\n')
         data = data.decode('utf-8')
         data = data[:-2]
@@ -143,11 +141,13 @@ class StorageServer:
         port = data[2]
 
         #检查是否已加入
-        check = self.node_table.get_nodes_for_key(node_id)
-        if len(check) == 0:
-            print("node has joined!")
-            return
-
+        # check = self.node_table.get_nodes_for_key(node_id)
+        # if len(check) == 0:
+        #     print("node has joined!")
+        #     return
+        for node in self.node_table.nodes:
+            if node_id == node.id:
+                writer.write(b'ALREADY\n\n')
         node = Node(node_id, ip, port)
         self.node_table.add_node_and_list_change(self.data_table,node)
 
@@ -156,7 +156,20 @@ class StorageServer:
     async def quit_network(self):
         data = self.node_id + "/" + self.ip + "/" + str(self.port)
         request = b'QUIT\n\n'
-        await self.send_message(ROOT_IP, ROOT_PORT, request, data)
+
+        # step 3: broadcast to all for join request
+        tasks = [self.send_message(node.ip, node.port, request, data) for node in self.node_table.nodes if node.ip != self.ip]
+        await asyncio.gather(*tasks)
+        # waiting other nodes update(1 sec)
+        await asyncio.sleep(1)
+        for data in self.data_table:
+            nodes = self.node_table.get_nodes_for_key(data.title)
+            if self.node in nodes:
+                for node in nodes:
+                    if node != self.node:
+                        await data.send_data(node.ip, ROOT_PORT)
+        sys.exit()
+
 
     async def handle_quit_network(self, reader, writer):
         data = await reader.readuntil(b'\n\n')
@@ -166,17 +179,23 @@ class StorageServer:
         id = data[0]
         ip = data[1]
         port = data[2]
-        next_ips = self.node_table.get_nodes_for_key(id)
+        
+        # node = Node(ip)
+        self.ring.remove_node(id)
+        
+        # changes = self.node_table.remove_node_and_list_change(self.data_table, id)
 
-        if self.ip == next_ips[0]:
-            for data in self.data_table.datas:
-                if ip in self.node_table.get_nodes_for_key(data["id"]):
-                    await self.request_data(data, ip)
+        # for change in changes:
+        #     if 
+        # if self.ip == next_ips[0]:
+        #     for data in self.data_table.datas:
+        #         if ip in self.node_table.get_nodes_for_key(data["id"]):
+        #             await self.request_data(data, ip)
 
-        self.node_table.remove_node(ip)
-        # 如何初始化↓ TODO
-        node = Node(ip)
-        self.ring.remove_node(node.id)
+        
+        # # 如何初始化↓ TODO
+        # node = Node(ip)
+        # self.ring.remove_node(node.id)
         # new_ring = HashRing(node_table)
         # self.ring = new_ring
 
@@ -268,7 +287,7 @@ class StorageServer:
                     writer.close()
                     await writer.wait_closed()
 
-    async def handle_request_data(self, writer, reader):
+    async def handle_request_data(self, reader, writer):
         """send back the requested file"""
         data = await reader.readuntil(b'\n\n')
         json_data = json.loads(data.decode('utf-8'))
@@ -429,7 +448,6 @@ class StorageServer:
             path=json_data['path'],
             check_hash=json_data['check_hash'],
             file_size=json_data['file_size'])
-        flag = 0
         os.makedirs(os.path.dirname(received_data.save_path), exist_ok=True)
         async with aiofiles.open(received_data.save_path, 'wb') as file:
             await file.write(pdf_data)
@@ -438,24 +456,43 @@ class StorageServer:
             self.data_table.add_data(received_data)
             nodes = self.node_table.get_nodes_for_key(received_data.title)
             for node in self.node_table.nodes:
-                if node in nodes:
-                    flag = 1
-                else:
+                if node.id != self.node.id:
                     await received_data.send_data(node.ip, dest_port=ROOT_PORT)
-            if flag == 0:
-                os.remove(os.path.dirname(received_data.save_path))
+
+            if self.node not in nodes:
+                os.remove(received_data.save_path)
         else:
             writer.write(b"SAVE_FAIL\n\n")
 
 async def start_root_node():
     my_server = StorageServer(DataTable(), "root", NodeTable(), ROOT_IP, int(ROOT_PORT))
     my_server.start_network()
-    await my_server.run_server()
+    tasks = [
+        asyncio.create_task(my_server.run_server()),
+        asyncio.create_task(listen_for_quit_command(my_server))
+    ]
+    await asyncio.gather(*tasks)
 
 async def start_node(id, ip, port):
     my_server = StorageServer(DataTable(), id, NodeTable(), ip, int(port))
     await my_server.join_network()
-    await my_server.run_server() 
+    tasks = [
+        asyncio.create_task(my_server.run_server()),
+        asyncio.create_task(listen_for_quit_command(my_server))
+    ]
+    await asyncio.gather(*tasks)
+
+async def listen_for_quit_command(my_server):
+    loop = asyncio.get_running_loop()
+    while True:
+        command = await loop.run_in_executor(None, sys.stdin.readline)
+        command = command.strip()  # 去除可能的换行符
+        if command == "quit":
+            print("Stopping the server...")
+            await my_server.quit_network()  # 确保这是一个异步函数
+            break
+        else:
+            print("we cannot identify your input...")
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
