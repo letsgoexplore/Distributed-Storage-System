@@ -163,12 +163,14 @@ class StorageServer:
         await asyncio.gather(*tasks)
         # waiting other nodes update(1 sec)
         await asyncio.sleep(1)
+        need_to_send = []
         for data in self.data_table:
             nodes = self.node_table.get_nodes_for_key(data.title)
-            if self.node in nodes:
-                for node in nodes:
-                    if node != self.node:
-                        await data.send_data(node.ip, ROOT_PORT)
+            need_to_send.append(data)
+        self.node_table.remove_node(self.node.id)
+        for data in need_to_send:
+            for node in nodes:
+                await data.send_data(node.ip, ROOT_PORT)
         sys.exit()
 
 
