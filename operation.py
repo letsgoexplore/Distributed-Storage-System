@@ -351,24 +351,24 @@ class StorageServer:
                     pdf_data = file.read()
                 writer.write(pdf_data)
             else:
-                node1, node2 = self.node_table.get_nodes_for_key(data.title)
+                node1, node2 = self.node_table.get_nodes_for_key(received_data.title)
                 request = b'REQUEST_DATA\n\n'
                 while True:
                     try:
                         r, w = await asyncio.open_connection(node1.ip, node1.port)
                         data0 = {
-                            "id": data.id,
-                            "save_hash": data.save_hash,
-                            "title": data.title,
-                            "path": data.path,
-                            "check_hash": data.check_hash,
-                            "file_size": data.file_size}
+                            "id": received_data.id,
+                            "save_hash": received_data.save_hash,
+                            "title": received_data.title,
+                            "path": received_data.path,
+                            "check_hash": received_data.check_hash,
+                            "file_size": received_data.file_size}
                         json_data = json.dumps(data0).encode('utf-8')
                         w.write(request)
                         w.write(json_data)
                         w.write(b'\n\n')  # 使用两个换行符作为分隔符
                         await w.drain()
-                        pdf_data = await r.readexactly(data.file_size)
+                        pdf_data = await r.readexactly(received_data.file_size)
                         writer.write(pdf_data)
                         break
 
@@ -389,18 +389,18 @@ class StorageServer:
                     try:
                         r, w = await asyncio.open_connection(node2.ip, node2.port)
                         data0 = {
-                            "id": data.id,
-                            "save_hash": data.save_hash,
-                            "title": data.title,
-                            "path": data.path,
-                            "check_hash": data.check_hash,
-                            "file_size": data.file_size}
+                            "id": received_data.id,
+                            "save_hash": received_data.save_hash,
+                            "title": received_data.title,
+                            "path": received_data.path,
+                            "check_hash": received_data.check_hash,
+                            "file_size": received_data.file_size}
                         json_data = json.dumps(data0).encode('utf-8')
                         w.write(request)
                         w.write(json_data)
                         w.write(b'\n\n')  # 使用两个换行符作为分隔符
                         await w.drain()
-                        pdf_data = await r.readexactly(data.file_size)
+                        pdf_data = await r.readexactly(received_data.file_size)
                         writer.write(pdf_data)
                         break
 
