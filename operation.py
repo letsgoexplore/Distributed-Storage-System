@@ -181,7 +181,7 @@ class StorageServer:
         port = data[2]
         
         # node = Node(ip)
-        self.ring.remove_node(id)
+        self.node_table.remove_node(id)
         
         # changes = self.node_table.remove_node_and_list_change(self.data_table, id)
 
